@@ -1,0 +1,36 @@
+GOID: GO:0006355
+Term: regulation of transcription, DNA-templated
+Ontology: BP
+Definition: Any process that modulates the frequency, rate or
+    extent of cellular DNA-templated transcription.
+Synonym: regulation of cellular transcription, DNA-dependent
+Synonym: regulation of gene-specific transcription
+Synonym: regulation of transcription, DNA-dependent
+Synonym: transcriptional control
+Synonym: GO:0032583
+Synonym: GO:0045449
+Synonym: GO:0061019
+Secondary: GO:0032583
+Secondary: GO:0045449
+Secondary: GO:0061019
+---------------------
+GOID: GO:0003700
+Term: DNA-binding transcription factor activity
+Ontology: MF
+Definition: A protein or a member of a complex that interacts
+    selectively and non-covalently with a specific DNA sequence
+    (sometimes referred to as a motif) within the regulatory
+    region of a gene to modulate transcription. Regulatory regions
+    include promoters (proximal and distal) and enhancers. Genes
+    are transcriptional units, and include bacterial operons.
+Synonym: DNA binding transcription factor activity
+Synonym: gene-specific transcription factor activity
+Synonym: nucleic acid binding transcription factor activity
+Synonym: sequence-specific DNA binding transcription factor
+    activity
+Synonym: transcription factor activity
+Synonym: GO:0000130
+Synonym: GO:0001071
+Secondary: GO:0000130
+Secondary: GO:0001071
+---------------------

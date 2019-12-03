@@ -1,0 +1,230 @@
+GOID: GO:0006355
+Term: regulation of transcription, DNA-templated
+Ontology: BP
+Definition: Any process that modulates the frequency, rate or
+    extent of cellular DNA-templated transcription.
+Synonym: regulation of cellular transcription, DNA-dependent
+Synonym: regulation of gene-specific transcription
+Synonym: regulation of transcription, DNA-dependent
+Synonym: transcriptional control
+Synonym: GO:0032583
+Synonym: GO:0045449
+Synonym: GO:0061019
+Secondary: GO:0032583
+Secondary: GO:0045449
+Secondary: GO:0061019
+---------------------
+GOID: GO:0003700
+Term: DNA-binding transcription factor activity
+Ontology: MF
+Definition: A protein or a member of a complex that interacts
+    selectively and non-covalently with a specific DNA sequence
+    (sometimes referred to as a motif) within the regulatory
+    region of a gene to modulate transcription. Regulatory regions
+    include promoters (proximal and distal) and enhancers. Genes
+    are transcriptional units, and include bacterial operons.
+Synonym: DNA binding transcription factor activity
+Synonym: gene-specific transcription factor activity
+Synonym: nucleic acid binding transcription factor activity
+Synonym: sequence-specific DNA binding transcription factor
+    activity
+Synonym: transcription factor activity
+Synonym: GO:0000130
+Synonym: GO:0001071
+Secondary: GO:0000130
+Secondary: GO:0001071
+---------------------
+GOID: GO:0043565
+Term: sequence-specific DNA binding
+Ontology: MF
+Definition: Interacting selectively and non-covalently with DNA of
+    a specific nucleotide composition, e.g. GC-rich DNA binding,
+    or with a specific sequence motif or type of DNA e.g. promotor
+    binding or rDNA binding.
+Synonym: sequence specific DNA binding
+---------------------
+GOID: GO:0005215
+Term: transporter activity
+Ontology: MF
+Definition: Enables the directed movement of substances (such as
+    macromolecules, small molecules, ions) into, out of or within
+    a cell, or between cells.
+Synonym: carrier
+Synonym: GO:0005478
+Secondary: GO:0005478
+---------------------
+GOID: GO:0000156
+Term: phosphorelay response regulator activity
+Ontology: MF
+Definition: Responds to a phosphorelay sensor to initiate a change
+    in cell state or activity. The activity of the response
+    regulator is regulated by transfer of a phosphate from a
+    histidine residue in the sensor, to an aspartate residue in
+    the response regulator. Many but not all response regulators
+    act as transcriptional regulators to elicit a response.
+Synonym: two-component response regulator activity
+---------------------
+GOID: GO:0009690
+Term: cytokinin metabolic process
+Ontology: BP
+Definition: The chemical reactions and pathways involving
+    cytokinins, a class of adenine-derived compounds that can
+    function in plants as growth regulators.
+Synonym: cytokinin metabolism
+---------------------
+GOID: GO:0019139
+Term: cytokinin dehydrogenase activity
+Ontology: MF
+Definition: Catalysis of the reaction: N6-dimethylallyladenine +
+    acceptor + H2O = adenine + 3-methylbut-2-enal + reduced
+    electron acceptor.
+Synonym: 6-N-dimethylallyladenine:acceptor oxidoreductase activity
+Synonym: cytokinin oxidase activity
+Synonym: N6-dimethylallyladenine:(acceptor) oxidoreductase
+    activity
+Synonym: N6-dimethylallyladenine:acceptor oxidoreductase activity
+Synonym: GO:0046420
+Secondary: GO:0046420
+---------------------
+GOID: GO:0000160
+Term: phosphorelay signal transduction system
+Ontology: BP
+Definition: A conserved series of molecular signals found in
+    prokaryotes and eukaryotes; involves autophosphorylation of a
+    histidine kinase and the transfer of the phosphate group to an
+    aspartate that then acts as a phospho-donor to response
+    regulator proteins.
+Synonym: histidyl-aspartyl phosphorelay
+Synonym: phosphorelay signal transduction system
+---------------------
+GOID: GO:0030001
+Term: metal ion transport
+Ontology: BP
+Definition: The directed movement of metal ions, any metal ion
+    with an electric charge, into, out of or within a cell, or
+    between cells, by means of some agent such as a transporter or
+    pore.
+Synonym: heavy metal ion transport
+---------------------
+GOID: GO:0005506
+Term: iron ion binding
+Ontology: MF
+Definition: Interacting selectively and non-covalently with iron
+    (Fe) ions.
+Synonym: iron binding
+---------------------
+GOID: GO:0055085
+Term: transmembrane transport
+Ontology: BP
+Definition: The process in which a solute is transported across a
+    lipid bilayer, from one side of a membrane to the other.
+Synonym: membrane transport
+---------------------
+GOID: GO:0006833
+Term: water transport
+Ontology: BP
+Definition: The directed movement of water (H2O) into, out of or
+    within a cell, or between cells, by means of some agent such
+    as a transporter or pore.
+---------------------
+GOID: GO:0003677
+Term: DNA binding
+Ontology: MF
+Definition: Any molecular function by which a gene product
+    interacts selectively and non-covalently with DNA
+    (deoxyribonucleic acid).
+Synonym: microtubule/chromatin interaction
+Synonym: plasmid binding
+Synonym: structure specific DNA binding
+Synonym: structure-specific DNA binding
+Synonym: GO:0043566
+Secondary: GO:0043566
+---------------------
+GOID: GO:0046872
+Term: metal ion binding
+Ontology: MF
+Definition: Interacting selectively and non-covalently with any
+    metal ion.
+Synonym: heavy metal binding
+Synonym: metal binding
+---------------------
+GOID: GO:0020037
+Term: heme binding
+Ontology: MF
+Definition: Interacting selectively and non-covalently with heme,
+    any compound of iron complexed in a porphyrin (tetrapyrrole)
+    ring.
+Synonym: haem binding
+---------------------
+GOID: GO:0009055
+Term: electron transfer activity
+Ontology: MF
+Definition: Any molecular entity that serves as an electron
+    acceptor and electron donor in an electron transport chain. An
+    electron transport chain is a process in which a series of
+    electron carriers operate together to transfer electrons from
+    donors to any of several different terminal electron acceptors
+    to generate a transmembrane electrochemical gradient.
+Synonym: electron acceptor activity
+Synonym: electron carrier
+Synonym: electron donor activity
+Synonym: electron transporter activity
+Synonym: GO:0009053
+Synonym: GO:0009054
+Secondary: GO:0009053
+Secondary: GO:0009054
+---------------------
+GOID: GO:0016020
+Term: membrane
+Ontology: CC
+Definition: A lipid bilayer along with all the proteins and
+    protein complexes embedded in it an attached to it.
+---------------------
+GOID: GO:0006810
+Term: transport
+Ontology: BP
+Definition: The directed movement of substances (such as
+    macromolecules, small molecules, ions) or cellular components
+    (such as complexes and organelles) into, out of or within a
+    cell, or between cells, or within a multicellular organism by
+    means of some agent such as a transporter, pore or motor
+    protein.
+Synonym: single-organism transport
+Synonym: small molecule transport
+Synonym: solute:solute exchange
+Synonym: GO:0015457
+Synonym: GO:0015460
+Synonym: GO:0044765
+Secondary: GO:0015457
+Secondary: GO:0015460
+Secondary: GO:0044765
+---------------------
+GOID: GO:0016705
+Term: oxidoreductase activity, acting on paired donors, with
+    incorporation or reduction of molecular oxygen
+Ontology: MF
+Definition: Catalysis of an oxidation-reduction (redox) reaction
+    in which hydrogen or electrons are transferred from each of
+    two donors, and molecular oxygen is reduced or incorporated
+    into a donor.
+Synonym: oxidoreductase activity, acting on paired donors, with
+    incorporation or reduction of molecular oxygen, miscellaneous
+---------------------
+GOID: GO:0008519
+Term: ammonium transmembrane transporter activity
+Ontology: MF
+Definition: Enables the transfer of ammonium from one side of a
+    membrane to the other. Ammonium is the cation NH4+ which is
+    formed from N2 by root-nodule bacteria in leguminous plants
+    and is an excretory product in ammonotelic animals.
+Synonym: ammonia transmembrane transporter activity
+Synonym: GO:0051739
+Secondary: GO:0051739
+---------------------
+GOID: GO:0072488
+Term: ammonium transmembrane transport
+Ontology: BP
+Definition: The process in which ammonium is transported across a
+    membrane. Ammonium is the cation NH4+.
+Synonym: ammonium membrane transport
+---------------------

@@ -1,0 +1,293 @@
+GOID: GO:0006355
+Term: regulation of transcription, DNA-templated
+Ontology: BP
+Definition: Any process that modulates the frequency, rate or
+    extent of cellular DNA-templated transcription.
+Synonym: regulation of cellular transcription, DNA-dependent
+Synonym: regulation of gene-specific transcription
+Synonym: regulation of transcription, DNA-dependent
+Synonym: transcriptional control
+Synonym: GO:0032583
+Synonym: GO:0045449
+Synonym: GO:0061019
+Secondary: GO:0032583
+Secondary: GO:0045449
+Secondary: GO:0061019
+---------------------
+GOID: GO:0003700
+Term: DNA-binding transcription factor activity
+Ontology: MF
+Definition: A protein or a member of a complex that interacts
+    selectively and non-covalently with a specific DNA sequence
+    (sometimes referred to as a motif) within the regulatory
+    region of a gene to modulate transcription. Regulatory regions
+    include promoters (proximal and distal) and enhancers. Genes
+    are transcriptional units, and include bacterial operons.
+Synonym: DNA binding transcription factor activity
+Synonym: gene-specific transcription factor activity
+Synonym: nucleic acid binding transcription factor activity
+Synonym: sequence-specific DNA binding transcription factor
+    activity
+Synonym: transcription factor activity
+Synonym: GO:0000130
+Synonym: GO:0001071
+Secondary: GO:0000130
+Secondary: GO:0001071
+---------------------
+GOID: GO:0055114
+Term: oxidation-reduction process
+Ontology: BP
+Definition: A metabolic process that results in the removal or
+    addition of one or more electrons to or from a substance, with
+    or without the concomitant removal or addition of a proton or
+    protons.
+Synonym: oxidation reduction
+Synonym: oxidoreductase process
+---------------------
+GOID: GO:0043565
+Term: sequence-specific DNA binding
+Ontology: MF
+Definition: Interacting selectively and non-covalently with DNA of
+    a specific nucleotide composition, e.g. GC-rich DNA binding,
+    or with a specific sequence motif or type of DNA e.g. promotor
+    binding or rDNA binding.
+Synonym: sequence specific DNA binding
+---------------------
+GOID: GO:0005506
+Term: iron ion binding
+Ontology: MF
+Definition: Interacting selectively and non-covalently with iron
+    (Fe) ions.
+Synonym: iron binding
+---------------------
+GOID: GO:0008152
+Term: metabolic process
+Ontology: BP
+Definition: The chemical reactions and pathways, including
+    anabolism and catabolism, by which living organisms transform
+    chemical substances. Metabolic processes typically transform
+    small molecules, but also include macromolecular processes
+    such as DNA repair and replication, and protein synthesis and
+    degradation.
+Synonym: metabolic process resulting in cell growth
+Synonym: metabolism
+Synonym: metabolism resulting in cell growth
+Synonym: multicellular organism metabolic process
+Synonym: single-organism metabolic process
+Synonym: GO:0044236
+Synonym: GO:0044710
+Secondary: GO:0044236
+Secondary: GO:0044710
+---------------------
+GOID: GO:0020037
+Term: heme binding
+Ontology: MF
+Definition: Interacting selectively and non-covalently with heme,
+    any compound of iron complexed in a porphyrin (tetrapyrrole)
+    ring.
+Synonym: haem binding
+---------------------
+GOID: GO:0030001
+Term: metal ion transport
+Ontology: BP
+Definition: The directed movement of metal ions, any metal ion
+    with an electric charge, into, out of or within a cell, or
+    between cells, by means of some agent such as a transporter or
+    pore.
+Synonym: heavy metal ion transport
+---------------------
+GOID: GO:0005215
+Term: transporter activity
+Ontology: MF
+Definition: Enables the directed movement of substances (such as
+    macromolecules, small molecules, ions) into, out of or within
+    a cell, or between cells.
+Synonym: carrier
+Synonym: GO:0005478
+Secondary: GO:0005478
+---------------------
+GOID: GO:0009690
+Term: cytokinin metabolic process
+Ontology: BP
+Definition: The chemical reactions and pathways involving
+    cytokinins, a class of adenine-derived compounds that can
+    function in plants as growth regulators.
+Synonym: cytokinin metabolism
+---------------------
+GOID: GO:0019139
+Term: cytokinin dehydrogenase activity
+Ontology: MF
+Definition: Catalysis of the reaction: N6-dimethylallyladenine +
+    acceptor + H2O = adenine + 3-methylbut-2-enal + reduced
+    electron acceptor.
+Synonym: 6-N-dimethylallyladenine:acceptor oxidoreductase activity
+Synonym: cytokinin oxidase activity
+Synonym: N6-dimethylallyladenine:(acceptor) oxidoreductase
+    activity
+Synonym: N6-dimethylallyladenine:acceptor oxidoreductase activity
+Synonym: GO:0046420
+Secondary: GO:0046420
+---------------------
+GOID: GO:0016705
+Term: oxidoreductase activity, acting on paired donors, with
+    incorporation or reduction of molecular oxygen
+Ontology: MF
+Definition: Catalysis of an oxidation-reduction (redox) reaction
+    in which hydrogen or electrons are transferred from each of
+    two donors, and molecular oxygen is reduced or incorporated
+    into a donor.
+Synonym: oxidoreductase activity, acting on paired donors, with
+    incorporation or reduction of molecular oxygen, miscellaneous
+---------------------
+GOID: GO:0005992
+Term: trehalose biosynthetic process
+Ontology: BP
+Definition: The chemical reactions and pathways resulting in the
+    formation of trehalose, a disaccharide isomeric with sucrose
+    and obtained from certain lichens and fungi.
+Synonym: mycose biosynthesis
+Synonym: mycose biosynthetic process
+Synonym: mykose biosynthesis
+Synonym: mykose biosynthetic process
+Synonym: trehalose anabolism
+Synonym: trehalose biosynthesis
+Synonym: trehalose formation
+Synonym: trehalose synthesis
+---------------------
+GOID: GO:0009055
+Term: electron transfer activity
+Ontology: MF
+Definition: Any molecular entity that serves as an electron
+    acceptor and electron donor in an electron transport chain. An
+    electron transport chain is a process in which a series of
+    electron carriers operate together to transfer electrons from
+    donors to any of several different terminal electron acceptors
+    to generate a transmembrane electrochemical gradient.
+Synonym: electron acceptor activity
+Synonym: electron carrier
+Synonym: electron donor activity
+Synonym: electron transporter activity
+Synonym: GO:0009053
+Synonym: GO:0009054
+Secondary: GO:0009053
+Secondary: GO:0009054
+---------------------
+GOID: GO:0019829
+Term: cation-transporting ATPase activity
+Ontology: MF
+Definition: Enables the transfer of a solute or solutes from one
+    side of a membrane to the other according to the reaction: ATP
+    + H2O + cation(out) = ADP + phosphate + cation(in).
+Synonym: cation ABC transporter
+Synonym: plasma membrane cation-transporting ATPase
+---------------------
+GOID: GO:0016020
+Term: membrane
+Ontology: CC
+Definition: A lipid bilayer along with all the proteins and
+    protein complexes embedded in it an attached to it.
+---------------------
+GOID: GO:0000156
+Term: phosphorelay response regulator activity
+Ontology: MF
+Definition: Responds to a phosphorelay sensor to initiate a change
+    in cell state or activity. The activity of the response
+    regulator is regulated by transfer of a phosphate from a
+    histidine residue in the sensor, to an aspartate residue in
+    the response regulator. Many but not all response regulators
+    act as transcriptional regulators to elicit a response.
+Synonym: two-component response regulator activity
+---------------------
+GOID: GO:0005507
+Term: copper ion binding
+Ontology: MF
+Definition: Interacting selectively and non-covalently with copper
+    (Cu) ions.
+Synonym: copper binding
+Synonym: copper/cadmium binding
+---------------------
+GOID: GO:0050660
+Term: flavin adenine dinucleotide binding
+Ontology: MF
+Definition: Interacting selectively and non-covalently with FAD,
+    flavin-adenine dinucleotide, the coenzyme or the prosthetic
+    group of various flavoprotein oxidoreductase enzymes, in
+    either the oxidized form, FAD, or the reduced form, FADH2.
+Synonym: FAD or FADH2 binding
+Synonym: flavine-adenine dinucleotide binding
+---------------------
+GOID: GO:0000160
+Term: phosphorelay signal transduction system
+Ontology: BP
+Definition: A conserved series of molecular signals found in
+    prokaryotes and eukaryotes; involves autophosphorylation of a
+    histidine kinase and the transfer of the phosphate group to an
+    aspartate that then acts as a phospho-donor to response
+    regulator proteins.
+Synonym: histidyl-aspartyl phosphorelay
+Synonym: phosphorelay signal transduction system
+---------------------
+GOID: GO:0046872
+Term: metal ion binding
+Ontology: MF
+Definition: Interacting selectively and non-covalently with any
+    metal ion.
+Synonym: heavy metal binding
+Synonym: metal binding
+---------------------
+GOID: GO:0003824
+Term: catalytic activity
+Ontology: MF
+Definition: Catalysis of a biochemical reaction at physiological
+    temperatures. In biologically catalyzed reactions, the
+    reactants are known as substrates, and the catalysts are
+    naturally occurring macromolecular substances known as
+    enzymes. Enzymes possess specific binding sites for
+    substrates, and are usually composed wholly or largely of
+    protein, but RNA that has catalytic activity (ribozyme) is
+    often also regarded as enzymatic.
+Synonym: enzyme activity
+---------------------
+GOID: GO:0016841
+Term: ammonia-lyase activity
+Ontology: MF
+Definition: Catalysis of the release of ammonia by the cleavage of
+    a carbon-nitrogen bond or the reverse reaction with ammonia as
+    a substrate.
+---------------------
+GOID: GO:0006559
+Term: L-phenylalanine catabolic process
+Ontology: BP
+Definition: The chemical reactions and pathways resulting in the
+    breakdown of phenylalanine, 2-amino-3-phenylpropanoic acid.
+Synonym: L-phenylalanine breakdown
+Synonym: L-phenylalanine catabolism
+Synonym: L-phenylalanine degradation
+Synonym: phenylalanine catabolic process
+Synonym: phenylalanine catabolism
+---------------------
+GOID: GO:0048046
+Term: apoplast
+Ontology: CC
+Definition: The cell membranes and intracellular regions in a
+    plant are connected through plasmodesmata, and plants may be
+    described as having two major compartments: the living
+    symplast and the non-living apoplast. The apoplast is external
+    to the plasma membrane and includes cell walls, intercellular
+    spaces and the lumen of dead structures such as xylem vessels.
+    Water and solutes pass freely through it.
+---------------------
+GOID: GO:0006833
+Term: water transport
+Ontology: BP
+Definition: The directed movement of water (H2O) into, out of or
+    within a cell, or between cells, by means of some agent such
+    as a transporter or pore.
+---------------------
+GOID: GO:0055085
+Term: transmembrane transport
+Ontology: BP
+Definition: The process in which a solute is transported across a
+    lipid bilayer, from one side of a membrane to the other.
+Synonym: membrane transport
+---------------------

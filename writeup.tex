@@ -1,0 +1,1601 @@
+\documentclass{article}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+\usepackage{extramarks}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amsfonts}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{upgreek}
+\usepackage{float}
+\usepackage{subcaption}
+\topmargin=-0.45in
+\evensidemargin=0in
+\oddsidemargin=0in
+\textwidth=6.5in
+\textheight=9.0in
+\headsep=0.25in
+
+\linespread{1.1}
+
+\pagestyle{fancy}
+\renewcommand\headrulewidth{0.4pt}
+\renewcommand\footrulewidth{0.4pt}
+\renewcommand{\vec}[1]{\boldsymbol{#1}}
+
+\title{RNA-Seq Analysis}
+
+\begin{document}
+<<setup, echo=FALSE,message=FALSE>>=
+options(stringsAsFactors=FALSE)
+library(ggplot2)
+library(DESeq2)
+library(knitr)
+library(RColorBrewer)
+library(pheatmap)
+library(IHW)
+library(Mfuzz)
+library(tximport)
+library(GO.db)
+library(treemap)
+library(goseq)
+library(VennDiagram)
+library(gridExtra)
+#knitr::opts_chunk$set(fig.pos = 'H')
+@
+\section{Summary}
+This document collects all the various plots I generated while looking at the \textit{php} data as well as pertinent technical information. Some of the plots are less useful than others, but still may be of use or interest. The big takeaway is probably that the \textit{php}s do look like negative regulators of cytokinin signaling. If you compare the genes differentially expressed at the 100 nM BA and 5 $\upmu$M BA conditions and the genes DE after mutation of the \textit{php}s (Figures \ref{fig:100nMmutoverlap} and \ref{fig:5uMmutoverlap}), the overlap is much stronger for upregulated genes than for downregulated genes.
+Also, this document is still missing GO Enrichment analyses.
+
+\section{Experimental Design}
+This experiment involved the treatment of Kitaake cultivar \textit{Oryza sativa}, wild-type and a \textit{php1,2,3} triple mutant with benzyl adenine (BA).
+Rice seeds were surface sterilized and germinated in sterilized hydroponics chambers for (I think) one week.
+One day before treatment, the media in the hydroponics boxes was replaced.
+On the day of the experiment, the media was spiked with either a vehicle control (NaOH solution) or a BA treatment (100 nM BA or 5 $\upmu$M BA, in NaOH solution).
+The seedlings were treated for two hours before harvesting.
+
+Harvesting tended to take about an hour, maybe an hour and a half, from start to finish. Samantha usually started with the control plants, while I started with the 5 $\upmu$M BA treated plants. We would both work on the 100 nM treated plants once we finished our first set. A set of 8 developmentally-matched seedlings were chosen from each genotype at each treatment condition. A few samples had less than 8 plants due to germination failures.  
+
+The roots were separated from the shoots using a scalpel blade  by cutting above and below the rice grain. The roots were sliced several places along their length and then mixed up so that sampling would contain a mix of root fragments from each plant and from each region of the root. The shoots were cut and mixed the same way. Each set of root and shoot tissue was divided into three tubes and flash-frozen in liquid nitrogen.
+
+RNA was prepared using a homebrew library prep protocol and custom-synthesized kappa truseq adapters. sequencing was performed by pooling all the samples on one flowcell of a novaseq SP and sequencing paired end 50bp reads.
+
+% need data on preps
+
+%two-hour treatments with BA
+%in transpiration box
+\section{Analysis}
+\subsection{Server work}
+This data was analyzed on UNC's servers. Alignment was performed using a \texttt{star} genome built on the IRGSP 1.0 genome release and an IRGSP 1.0 representative transcript file created on August 29th, 2019. An overhang value of 49 was used and based on recommendations from the program, the SA index N bases parameter was set to 13. Quantification was performed using \texttt{salmon} and the same transcriptome file used for the \texttt{star} index. The gcBias and seqBias flags were both activated. The \texttt{star} version was 2.7.2b and the \texttt{salmon} version was v0.14.0.
+
+\subsection{Local work}
+This analysis was performed using \texttt{DESeq2}. A group variable combining treatment and genotype information was constructed to separate the effects of mutation on Kitaake and mutant samples separately. The model formula used was \texttt{~Group+Rep}, where \texttt{Rep} was an indicator variable for each replicate batch.
+
+
+<<input,echo=FALSE,results=FALSE>>=
+sampleData <- read.delim("sampleData.txt")
+sampleData$Group <- factor(sampleData$Group,levels=c("Kitaake.NaOH","Kitaake.100nM","Kitaake.5uM","php.NaOH","php.100nM","php.5uM"))
+sampleData$Rep <- as.factor(sampleData$Rep)
+tx2gene <- read.delim("IRGSP-1.0_representative_annotation_2019-08-29.txt")
+ckElements <- read.delim("CKelements.txt")
+GOslim <- read.delim("all.GOSlim_assignment",header=FALSE)
+locusInfo <- read.delim("all.locus_brief_info.7.0")
+mapping <- read.delim("RAP-MSUsinglelocus.txt",header=FALSE)
+names(mapping) <- c("RAP","MSU")
+
+#establish the GO data and functions
+GOdata <- read.delim("GO-from-RAPD-IRGSP-problemgenesremoved.txt")
+GOdata$Locus <- toupper(GOdata$Locus)
+
+lengthData <- read.delim("lengthdata.txt",stringsAsFactors=FALSE)
+
+mapping <- read.delim("RAP-MSUsinglelocus.txt",stringsAsFactors=FALSE)
+mapping$RAP <- toupper(mapping$RAP)
+
+lengthData$RAP <- mapping$RAP[match(lengthData$Geneid,mapping$MSU)]
+
+# Custom function to remove NAs
+cutFunction <- function(x,y) {
+	if (is.na(x[y])==TRUE) {
+		return(FALSE)
+	} else{
+		return(TRUE)
+	}
+}
+
+# Process the frames a little
+# Going forward, make sure to use the appropriate version of the lengthData (RAP or MSU) depending on the dataset you're analyzing
+lengthCutMSU <- apply(lengthData,1,function(x) cutFunction(x,1))
+lengthCutRAP <- apply(lengthData,1,function(x) cutFunction(x,3))
+lengthDataMSU <- lengthData[lengthCutMSU,]
+lengthDataRAP <- lengthData[lengthCutRAP,]
+lengthDataRAP <- lengthDataRAP[lengthDataRAP$RAP %in% toupper(GOdata$Locus),]
+
+# wrapping up all the GO analysis stuff in one function
+goFunc <- function(generesultsobject,lengthObject,goobject,printGO=TRUE,writefile=FALSE,filename=NA) {
+	# generesultsobject - DESeq2 results object, filtered as needed
+	# lengthObject - lengthData object describing lengths of gene loci
+	# goobject - data frame linking loci to GO term annotations
+	# printGO - if TRUE, prints results directly. if FALSE, returns object holding GO data
+	
+	if ( class(generesultsobject) == "character" ) {
+		diffGenes <- as.integer(lengthObject$RAP %in% toupper(generesultsobject))
+	} else {
+		diffGenes <- as.integer(lengthObject$RAP %in% toupper(row.names(generesultsobject)))
+	}
+	
+	names(diffGenes) <- lengthObject$RAP
+
+	probWeightFunc <- nullp(DEgenes = diffGenes,
+		bias.data=lengthObject$Length,plot.fit=FALSE)
+
+	GO.wallenius <- goseq(probWeightFunc,
+		test.cats = c("GO:CC","GO:BP","GO:MF"),
+		method="Wallenius",
+		gene2cat = goobject)
+
+	GO.enriched <- GO.wallenius$category[p.adjust(
+		GO.wallenius$over_represented_pvalue,
+		method="BH")<=0.05]
+	
+	if ( writefile == TRUE ) {
+		if (is.na(filename) == TRUE) {
+			print("file not written, no filename provided")
+		} else if (identical(GO.enriched,character(0))==TRUE) {
+			capture.output({print("No terms were enriched.")},file=filename)
+		} else {
+			capture.output({
+				for (eachTerm in GO.enriched[1:length(GO.enriched)]) {
+					
+					print(GOTERM[[eachTerm]])
+					cat("---------------------\n") 
+				}
+			
+			},file=filename)
+		
+		}
+	}
+	
+	if (printGO == TRUE ) {
+		if ((identical(GO.enriched,character(0))==TRUE)) {
+			print("No terms were enriched.")
+		} else {
+			for (eachTerm in GO.enriched[1:length(GO.enriched)]) {
+				print(GOTERM[[eachTerm]])
+				cat("---------------------\n")
+			}
+		}
+	} else {
+		return(GO.enriched)
+	}
+}
+
+
+#goFunc(NaOHresults,lengthDataRAP,GOdata,printGO=TRUE)
+#goFunc(KvPCut,lengthDataRAP,GOdata,printGO=FALSE,writefile=TRUE,filename="Export/Kitaake vs php 0.05 1.5fold untreated test.txt")
+
+@
+
+<<frameprocess,echo=FALSE>>=
+resultsFrameProcess <- function(x,y=0.05,z=1.5) {
+	# x = DESeq2 results data frame
+	# y = p-value cutoff
+	# z = fold-change cutoff
+	if (z==0) {
+		print("fold-change value cannot be 0. function ending without changing input.")
+		return(x)
+	}
+	x <- x[!is.na(x$padj),]
+	x <- x[abs(x$log2FoldChange)>=log2(z),]
+	x <- x[x$padj <= y,]
+	return(x)
+}
+@
+
+
+
+<<maininput,results=FALSE,echo=FALSE,message=FALSE,cache=TRUE>>=
+riceTxi <- tximport(
+				paste("Quant",sampleData$Filename,sep="\\"),
+				type="salmon",
+				tx2gene=tx2gene)
+riceDdsTxi <- DESeqDataSetFromTximport(
+				riceTxi,
+				colData=sampleData,
+				design=~Group+Rep)
+
+riceDds <- DESeq(riceDdsTxi)
+
+@
+
+<<mainresults,results=FALSE,echo=FALSE,message=FALSE>>=
+riceResults <- results(riceDds,filterFun=ihw,alpha=0.05)
+
+
+@
+
+\subsection{Data Quality}
+Following the recommendation of the package authors, I have applied a variance stabilizing transformation to the data for the next few visualizations. Euclidean distance metrics are shown in Figure \ref{fig:EucDist}. Several Principal Component Analysis plots are shown in Figure \ref{fig:PCAtreatgeno} and Figure \ref{fig:PCAallgroups}.
+
+<<phpkitonly,cache=TRUE,echo=FALSE,results=FALSE,message=FALSE,fig.cap="The first two principal components for the dataset including Kitaake and \textit{php1,2,3} mutant samples",fig.lp="fig:">>=
+sampleData2 <- sampleData[sampleData$Genotype=="Kitaake"|sampleData$Genotype=="php",]
+riceTxi2 <- tximport(paste("Quant",sampleData2$Filename,sep="\\"),type="salmon",tx2gene=tx2gene)
+riceDdsTxi2 <- DESeqDataSetFromTximport(riceTxi2,colData=sampleData2,design=~Group+Rep)
+riceDds2 <- DESeq(riceDdsTxi2)
+riceVsd2 <- vst(riceDds2,blind=FALSE)
+@
+
+<<PCAphpkitonly,echo=FALSE>>=
+plotPCA(riceVsd2,intgroup="Genotype")
+@
+
+<<phponlycomparisons,echo=FALSE,message=FALSE>>=
+# get results out
+Kitonly <- results(riceDds2,contrast=c("Group","Kitaake.100nM","Kitaake.NaOH"),filterFun=ihw,alpha=0.05)
+Phponly <- results(riceDds2,contrast=c("Group","php.100nM","php.NaOH"),filterFun=ihw,alpha=0.05)
+
+Kitonly5 <- results(riceDds2,contrast=c("Group","Kitaake.5uM","Kitaake.NaOH"),filterFun=ihw,alpha=0.05)
+Phponly5 <- results(riceDds2,contrast=c("Group","php.5uM","php.NaOH"),filterFun=ihw,alpha=0.05)
+
+KitonlyCut <- resultsFrameProcess(Kitonly,0.05,1.5)
+Kitonly5Cut <- resultsFrameProcess(Kitonly5,0.05,1.5)
+PhponlyCut <- resultsFrameProcess(Phponly,0.05,1.5)
+PhponlyCut5 <- resultsFrameProcess(Phponly5,0.05,1.5)
+
+#ckDEallnames <- unique(c(rownames(Kitonly),rownames(Kitonly5),rownames(Phponly),rownames(Phponly5)))
+#ckDEall <- normCounts[rownames(normCounts) %in% ckDEallnames,]
+#write.table(ckDEall,"Export/CK DE genes no FC cutoff.txt",quote=FALSE,sep="\t")
+
+#ckDEcutnames <- unique(c(rownames(KitonlyCut),rownames(Kitonly5Cut),rownames(PhponlyCut),rownames(PhponlyCut5)))
+#ckDEcut <- normCounts[rownames(normCounts) %in% ckDEcutnames,]
+#write.table(ckDEcut,"Export/CK DE genes 1.5x FC cutoff.txt",quote=FALSE,sep="\t")
+
+goFunc(KitonlyCut,lengthDataRAP,GOdata,printGO=FALSE,writefile=TRUE,filename="Export/Kitaake 100 nM vs NaOH, 0.05 1.5 fold enriched GO terms.txt")
+goFunc(Kitonly5Cut,lengthDataRAP,GOdata,printGO=FALSE,writefile=TRUE,filename="Export/Kitaake 5 uM vs NaOH 0.05 1.5fold untreated enriched GO terms.txt")
+goFunc(PhponlyCut,lengthDataRAP,GOdata,printGO=FALSE,writefile=TRUE,filename="Export/php 100 nM vs NaOH 0.05 1.5fold untreated enriched GO terms.txt")
+goFunc(PhponlyCut5,lengthDataRAP,GOdata,printGO=FALSE,writefile=TRUE,filename="Export/php 5 uM vs NaOH 0.05 1.5fold untreated enriched GO terms.txt")
+
+@
+
+\subsection{Fold-change Tuning}
+
+<<tunefoldchange,echo=FALSE>>=
+cutoffs <- c(1,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0,2.1,2.2,2.3,2.4,2.5,2.6,2.7,2.8,2.9,3.0)
+
+# generate range of foldchange cutoffs
+kit100list <- list( resultsFrameProcess(Kitonly,0.05,1),
+					resultsFrameProcess(Kitonly,0.05,1.1),
+					resultsFrameProcess(Kitonly,0.05,1.2),
+					resultsFrameProcess(Kitonly,0.05,1.3),
+					resultsFrameProcess(Kitonly,0.05,1.4),
+					resultsFrameProcess(Kitonly,0.05,1.5),
+					resultsFrameProcess(Kitonly,0.05,1.6),
+					resultsFrameProcess(Kitonly,0.05,1.7),
+					resultsFrameProcess(Kitonly,0.05,1.8),
+					resultsFrameProcess(Kitonly,0.05,1.9),
+					resultsFrameProcess(Kitonly,0.05,2.0),
+					resultsFrameProcess(Kitonly,0.05,2.1),
+					resultsFrameProcess(Kitonly,0.05,2.2),
+					resultsFrameProcess(Kitonly,0.05,2.3),
+					resultsFrameProcess(Kitonly,0.05,2.4),
+					resultsFrameProcess(Kitonly,0.05,2.5),
+					resultsFrameProcess(Kitonly,0.05,2.6),
+					resultsFrameProcess(Kitonly,0.05,2.7),
+					resultsFrameProcess(Kitonly,0.05,2.8),
+					resultsFrameProcess(Kitonly,0.05,2.9),
+					resultsFrameProcess(Kitonly,0.05,3.0))
+
+					
+kit5list <- list(   resultsFrameProcess(Kitonly5,0.05,1),
+					resultsFrameProcess(Kitonly5,0.05,1.1),
+					resultsFrameProcess(Kitonly5,0.05,1.2),
+					resultsFrameProcess(Kitonly5,0.05,1.3),
+					resultsFrameProcess(Kitonly5,0.05,1.4),
+					resultsFrameProcess(Kitonly5,0.05,1.5),
+					resultsFrameProcess(Kitonly5,0.05,1.6),
+					resultsFrameProcess(Kitonly5,0.05,1.7),
+					resultsFrameProcess(Kitonly5,0.05,1.8),
+					resultsFrameProcess(Kitonly5,0.05,1.9),
+					resultsFrameProcess(Kitonly5,0.05,2.0),
+					resultsFrameProcess(Kitonly5,0.05,2.1),
+					resultsFrameProcess(Kitonly5,0.05,2.2),
+					resultsFrameProcess(Kitonly5,0.05,2.3),
+					resultsFrameProcess(Kitonly5,0.05,2.4),
+					resultsFrameProcess(Kitonly5,0.05,2.5),
+					resultsFrameProcess(Kitonly5,0.05,2.6),
+					resultsFrameProcess(Kitonly5,0.05,2.7),
+					resultsFrameProcess(Kitonly5,0.05,2.8),
+					resultsFrameProcess(Kitonly5,0.05,2.9),
+					resultsFrameProcess(Kitonly5,0.05,3.0))
+
+jaccard <- NULL
+sscoef <- NULL
+sdcoef <- NULL
+
+for (eachComparisonNumber in 1:length(kit100list) ){
+	print(paste("current cutoff is",cutoffs[eachComparisonNumber],sep=" "))
+	print(paste(dim(kit100list[[eachComparisonNumber]])[1],"genes are mutated at 100 nM",sep=" "))
+	print(paste(dim(kit5list[[eachComparisonNumber]])[1],"genes are mutated at 5 uM",sep=" "))
+	print(paste(sum(rownames(kit100list[[eachComparisonNumber]]) %in% rownames(kit5list[[eachComparisonNumber]])),"genes are shared between the two sets",sep=" "))
+	
+	currentJaccard <- sum(rownames(kit100list[[eachComparisonNumber]]) %in% rownames(kit5list[[eachComparisonNumber]])) /		(length(unique(c(rownames(kit100list[[eachComparisonNumber]]),						rownames(kit5list[[eachComparisonNumber]])))))
+	
+	currentSScoef <- sum(rownames(kit100list[[eachComparisonNumber]]) %in% rownames(kit5list[[eachComparisonNumber]])) / min(length(rownames(kit5list[[eachComparisonNumber]])), length(rownames(kit100list[[eachComparisonNumber]])))
+	
+	currentSDcoef <- (2*sum(rownames(kit100list[[eachComparisonNumber]]) %in% rownames(kit5list[[eachComparisonNumber]]))) / (length(rownames(kit100list[[eachComparisonNumber]])) + length(rownames(kit5list[[eachComparisonNumber]])))
+	
+	jaccard <- c(jaccard,currentJaccard)
+	sscoef <- c(sscoef,currentSScoef)
+	sdcoef <- c(sdcoef,currentSDcoef)
+	
+	
+	print(paste("jaccard index is",currentJaccard,sep=" "))
+	print(paste("set similartiy coef is",currentSScoef,sep=" "))
+	print(paste("sorenson dice coef is",currentSDcoef,sep=" "))
+	print("")
+}
+dev.new()
+plot(cutoffs,jaccard)
+dev.new()
+plot(cutoffs,sscoef)
+dev.new()
+plot(cutoffs,sdcoef)
+
+@
+
+
+
+There's still some smearing of groups together. In this analysis, there are \Sexpr{dim(KitonlyCut)[1]} genes DE in Kitaake (\Sexpr{sum(KitonlyCut$log2FoldChange<0)} down, \Sexpr{sum(KitonlyCut$log2FoldChange>0)} up) and \Sexpr{dim(PhponlyCut)[1]} genes DE in the \textit{php} mutant (\Sexpr{sum(PhponlyCut$log2FoldChange<0)} down, \Sexpr{sum(PhponlyCut$log2FoldChange>0)} up). 
+The two groups share \Sexpr{sum(row.names(KitonlyCut) %in% row.names(PhponlyCut))} genes.
+Of the up-regulated genes, \Sexpr{ sum(row.names(KitonlyCut[KitonlyCut$log2FoldChange>0,]) %in% row.names(PhponlyCut[PhponlyCut$log2FoldChange>0,]))} are shared.
+Of the down-regulated genes, \Sexpr{sum(row.names(KitonlyCut[KitonlyCut$log2FoldChange<0,]) %in% row.names(PhponlyCut[PhponlyCut$log2FoldChange<0,]))} are shared.
+
+\subsection{Venn Diagrams}
+
+<<squarevenn,echo=FALSE,results=FALSE>>=
+KitUp <- rownames(KitonlyCut)[KitonlyCut$log2FoldChange>0]
+KitDown <- rownames(KitonlyCut)[KitonlyCut$log2FoldChange<0]
+PhpUp <- rownames(PhponlyCut)[PhponlyCut$log2FoldChange>0]
+PhpDown <- rownames(PhponlyCut)[PhponlyCut$log2FoldChange<0]
+
+allSets <- list(KitUp=KitUp,KitDown=KitDown,PhpUp=PhpUp,PhpDown=PhpDown)
+
+venn.diagram(allSets,filename="vennout100.png",imagetype="png",fill = c("cornflowerblue", "green", "yellow", "darkorchid1"))
+
+
+venn.diagram(list(KUP=KitUp,PUP=PhpUp),filename="Kit-php-up-100nM.png",imagetype="png",fill=c("cornflowerblue","yellow"))
+
+venn.diagram(list(KDN=KitDown,PDN=PhpDown),filename="Kit-php-down-100nM.png",imagetype="png",fill=c("cornflowerblue","yellow"))
+
+
+venn.diagram(list(KUP=KitUp,PUP=PhpUp),filename="Kit-php-up-100nM.svg",imagetype="svg",fill=c("cornflowerblue","yellow"))
+
+venn.diagram(list(KDN=KitDown,PDN=PhpDown),filename="Kit-php-down-100nM.svg",imagetype="svg",fill=c("cornflowerblue","yellow"))
+
+
+@
+
+
+\begin{figure}
+	\begin{subfigure}{0.49\linewidth}
+		\includegraphics[width=\linewidth]{Kit-php-up-100nM.png}
+		\caption{Up-regulated genes.}
+		\label{fig:phpkitup100A}
+	\end{subfigure}
+	\begin{subfigure}{0.49\linewidth}
+		\includegraphics[width=\linewidth]{Kit-php-down-100nM.png}
+		\caption{Down-regulated genes.}
+		\label{fig:phpkitup100B}	
+	\end{subfigure}
+	
+	\caption{Differentially expressed genes in Kitaake and \textit{php} mutants after 100 nM BA treatment.}
+	\label{fig:phpkitup100}
+\end{figure}
+
+
+
+
+\begin{figure}
+	\centering{}
+	\includegraphics[width=0.5\textwidth]{vennout100.png}
+	\caption{Overlap between BA-regulated genes in Kitaake and \textit{php} mutants at 100 nM BA.}
+	\label{fig:squarevenn100}
+\end{figure}
+
+<<squarevenn2,echo=FALSE,results=FALSE>>=
+KitUp5 <- rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange>0]
+KitDown5 <- rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange<0]
+PhpUp5 <- rownames(PhponlyCut5)[PhponlyCut5$log2FoldChange>0]
+PhpDown5 <- rownames(PhponlyCut5)[PhponlyCut5$log2FoldChange<0]
+
+allSets5 <- list(KitUp=KitUp5,KitDown=KitDown5,PhpUp=PhpUp5,PhpDown=PhpDown5)
+
+venn.diagram(allSets5,filename="vennout5.png",imagetype="png",fill = c("cornflowerblue", "green", "yellow", "darkorchid1"))
+
+
+
+venn.diagram(list(KUP=KitUp5,PUP=PhpUp5),filename="Kit-php-up-5uM.png",imagetype="png",fill=c("cornflowerblue","yellow"))
+
+venn.diagram(list(KDN=KitDown5,PDN=PhpDown5),filename="Kit-php-down-5uM.png",imagetype="png",fill=c("cornflowerblue","yellow"))
+
+
+@
+
+\begin{figure}
+	\begin{subfigure}{0.49\linewidth}
+		\includegraphics[width=\linewidth]{Kit-php-up-5uM.png}
+		\caption{Up-regulated genes.}
+		\label{fig:phpkitup5A}
+	\end{subfigure}
+	\begin{subfigure}{0.49\linewidth}
+		\includegraphics[width=\linewidth]{Kit-php-down-5uM.png}
+		\caption{Down-regulated genes.}
+		\label{fig:phpkitup5B}	
+	\end{subfigure}
+	
+	\caption{Differentially expressed genes in Kitaake and \textit{php} mutants after 5 $\upmu$M BA treatment.}
+	\label{fig:phpkitup5}
+\end{figure}
+
+
+<<fourwayups>>=
+#KitUp
+#KitDown
+#PhpUp
+#PhpDown
+#KitUp5
+#KitDown5
+#PhpUp5
+#PhpDown5
+
+allSetsUp <- list(K100=KitUp,K5=KitUp5,P100=PhpUp,P5=PhpUp5)
+allSetsDown <- list(K100=KitDown,K5=KitDown5,P100=PhpDown,P5=PhpDown5)
+
+
+venn.diagram(allSetsUp,filename="upregulatedgenes.svg",imagetype="svg",fill = c("cornflowerblue", "green", "yellow", "darkorchid1"),width=4,height=4,units="in")
+venn.diagram(allSetsDown,filename="downregulatedgenes.svg",imagetype="svg",fill = c("cornflowerblue", "green", "yellow", "darkorchid1"),width=4,height=4,units="in")
+
+
+@
+
+
+
+
+\begin{figure}
+	\centering{}
+	\includegraphics[width=0.5\textwidth]{vennout5.png}
+	\caption{Overlap between BA-regulated genes in Kitaake and \textit{php} mutants at 5 $\upmu{}$M BA.}
+	\label{fig:squarevenn5}
+\end{figure}
+
+<<fortable,echo=FALSE>>=
+Kitfortable <- KitonlyCut[rownames(KitonlyCut) %in% ckElements$Locus,c(2,6)]
+Phpfortable <- PhponlyCut[rownames(PhponlyCut) %in% ckElements$Locus,c(2,6)]
+
+Kitfortable$Locus <- rownames(Kitfortable)
+Kitfortable$Name <- ckElements$GeneID[match(Kitfortable$Locus,ckElements$Locus)]
+rownames(Kitfortable) <- NULL
+Kitfortable <- Kitfortable[c(4,3,1,2)]
+
+Phpfortable$Locus <- rownames(Phpfortable)
+Phpfortable$Name <- ckElements$GeneID[match(Phpfortable$Locus,ckElements$Locus)]
+rownames(Phpfortable) <- NULL
+Phpfortable <- Phpfortable[c(4,3,1,2)]
+
+# Now 5 uM
+Kitfortable5 <- Kitonly5Cut[rownames(Kitonly5Cut) %in% ckElements$Locus,c(2,6)]
+Phpfortable5 <- PhponlyCut5[rownames(PhponlyCut5) %in% ckElements$Locus,c(2,6)]
+
+Kitfortable5$Locus <- rownames(Kitfortable5)
+Kitfortable5$Name <- ckElements$GeneID[match(Kitfortable5$Locus,ckElements$Locus)]
+rownames(Kitfortable5) <- NULL
+Kitfortable5 <- Kitfortable5[c(4,3,1,2)]
+
+Phpfortable5$Locus <- rownames(Phpfortable5)
+Phpfortable5$Name <- ckElements$GeneID[match(Phpfortable5$Locus,ckElements$Locus)]
+rownames(Phpfortable5) <- NULL
+Phpfortable5 <- Phpfortable5[c(4,3,1,2)]
+@
+
+\begin{table}
+	\begin{subtable}{.8\linewidth}
+		\Sexpr{kable(Kitfortable,format="latex",booktabs=TRUE)}
+		\caption{Kitaake specific responses.}
+		\label{tab:CK100A}
+	\end{subtable}
+	
+	\begin{subtable}{.8\linewidth}
+		\Sexpr{kable(Phpfortable,format="latex",booktabs=TRUE)}
+		\caption{Triple \textit{php} mutant specific responses.}
+		\label{tab:CK100B}
+	\end{subtable}
+
+	\caption{Cytokinin-related gene expression changes after treatment with 100 nM BA in Kitaake and \textit{php} triple mutant roots.}
+	\label{tab:CK100}
+\end{table}
+
+
+\begin{table}
+	\begin{subtable}{.8\linewidth}
+		\Sexpr{kable(Kitfortable5,format="latex",booktabs=TRUE)}
+		\caption{Kitaake specific responses.}
+		\label{tab:CK5A}
+	\end{subtable}
+	
+	\begin{subtable}{.8\linewidth}
+		\Sexpr{kable(Phpfortable5,format="latex",booktabs=TRUE)}
+		\caption{Triple \textit{php} mutant specific responses.}
+		\label{tab:CK5B}
+	\end{subtable}
+
+	\caption{Cytokinin-related gene expression changes after treatment with 5 $\upmu$M BA in Kitaake and \textit{php} triple mutant roots.}
+	\label{tab:CK5}
+\end{table}
+\subsection{Bar charts}
+
+<<barchart,echo=FALSE,fig.cap="Cytokinin signaling-related gene expression after treatment with BA. Bars are 95 percent confidence intervals generated from 1000-trial bootstrapped estimates of the standard error. Values are means across replicates +1 to avoid division by zero errors. OsRR7 is not shown as its standard error was so large that error bars were impossible to construct.",out.width = "0.9\\textwidth",fig.align="center">>=
+
+# get the normalized counts out of the dds object
+normCounts <- counts(riceDds2,normalized=TRUE)
+normNames <- riceDds2$Filename
+
+write.table(normCounts,file="Export/Php.Kitaake.subset.normalized.counts.txt",sep="\t",quote=FALSE,col.names=normNames)
+
+# For reference, here's the names that go with the columns
+#normNames
+#[1] "1.wtNaR1.sf"      "2.wt100nMR1.sf"   "3.wt5uMR1.sf"     "13.phpNaR1.sf"    "14.php100nMR1.sf" "15.php5uMR1.sf"   "16.wtNaR2.sf"     "17.wt100nMR2.sf" 
+#[9] "18.wt5uMR2.sf"    "28.phpNaR2.sf"    "29.php100nMR2.sf" "30.php5uMR2.sf"   "31.wtNaR3.sf"     "32.wt100nMR3.sf"  "33.wt5uMR3.sf"    "43.phpNaR3.sf"   
+#[17] "44.php100nMR3.sf" "45.php5uMR3.sf"  
+
+# Separate the 100nM and 5uM experiments
+kitCounts <- data.frame(normCounts[,c(1,2,7,8,13,14)])
+phpCounts <- data.frame(normCounts[,c(4,5,10,11,16,17)])
+kitCounts5 <- data.frame(normCounts[,c(1,3,7,9,13,15)])
+phpCounts5 <- data.frame(normCounts[,c(4,6,10,12,16,18)])
+
+
+exprCutoff <- 20
+rowMeans(kitCounts[1:6]) >= 20
+
+# Generate fold change values
+# Using a "means +1" ratio
+kitCounts$FC <- (rowMeans(kitCounts[,c(2,4,6)])+1)/(rowMeans(kitCounts[,c(1,3,5)])+1)
+phpCounts$FC <- (rowMeans(phpCounts[,c(2,4,6)])+1)/(rowMeans(phpCounts[,c(1,3,5)])+1)
+kitCounts5$FC <-(rowMeans(kitCounts5[,c(2,4,6)])+1)/(rowMeans(kitCounts5[,c(1,3,5)])+1)
+phpCounts5$FC <- (rowMeans(phpCounts5[,c(2,4,6)])+1)/(rowMeans(phpCounts5[,c(1,3,5)])+1)
+
+# Isolate just the cytokinin elements
+kitCountsCK <- kitCounts[rownames(kitCounts) %in% ckElements$Locus,]
+phpCountsCK <- phpCounts[rownames(phpCounts) %in% ckElements$Locus,]
+kitCounts5CK <- kitCounts5[rownames(kitCounts5) %in% ckElements$Locus,]
+phpCounts5CK <- phpCounts5[rownames(phpCounts5) %in% ckElements$Locus,]
+
+# I don't think i ever actually use these objects
+newCounts <- data.frame(Kitaake.FC=kitCounts$FC,php.FC=phpCounts$FC)
+rownames(newCounts) <- rownames(kitCounts)
+newCounts5 <- data.frame(Kitaake.FC=kitCounts5$FC,php.FC=phpCounts5$FC)
+rownames(newCounts5) <- rownames(kitCounts5)
+
+# Bootstrap function for estimating standard error of the fold change values
+bootSD <- function(x,y,boot) {
+	# expects two pieces of a data frame
+	bootSamples <- rep(0,boot)
+	for (replicate in 1:boot) {
+		tempX <- sample(x,length(x),replace=TRUE)
+		tempY <- sample(y,length(y),replace=TRUE)
+		bootSamples[replicate] <- mean(as.numeric(tempX))/mean(as.numeric(tempY))
+	}
+	return(sd(bootSamples))
+}
+
+# Function to apply the bootstrap function
+# Mostly so I don't have to worry a bout troubleshooting multiple loops
+applyBoots <- function(x) {
+	x$SE <- 0
+	for (eachLocus in 1:dim(x)[1]) {
+		x$SE[eachLocus] <- bootSD(x[eachLocus,c(2,4,6)]+1,x[eachLocus,c(1,3,5)]+1,1000)
+	}
+	return(x)
+}
+
+# Get bootstrapped SE values
+kitCountsCK <- applyBoots(kitCountsCK)
+phpCountsCK <- applyBoots(phpCountsCK)
+kitCounts5CK <- applyBoots(kitCounts5CK)
+phpCounts5CK <- applyBoots(phpCounts5CK)
+
+# Construct a data frame to graph the ratio values
+dataToGraph <- data.frame(
+	Locus=c(rownames(kitCountsCK),rownames(phpCountsCK),rownames(kitCounts5CK),rownames(phpCounts5CK)),
+	FC=c(kitCountsCK$FC,phpCountsCK$FC,kitCounts5CK$FC,phpCounts5CK$FC),
+	SE=c(kitCountsCK$SE,phpCountsCK$SE,kitCounts5CK$SE,phpCounts5CK$SE),
+	Genotype=c(
+		rep("Kitaake",dim(kitCountsCK)[1]),
+		rep("php",dim(phpCountsCK)[1]),
+		rep("Kitaake",dim(kitCounts5CK)[1]),
+		rep("php",dim(phpCounts5CK)[1])),
+	Treatment=c(
+		rep("100nM",dim(kitCountsCK)[1]+dim(phpCountsCK)[1]),
+		rep("5uM",dim(kitCounts5CK)[1]+dim(phpCounts5CK)[1])))
+
+# Add the gene IDs so the graph is more readable
+dataToGraph$GeneID <- ckElements$GeneID[match(dataToGraph$Locus,ckElements$Locus)]
+
+dataToGraphFull <- dataToGraph
+
+# Remove any genes where the FC == 1.0000 because that means it was zero counts across the board
+# Hmmm i guess if i got identical counts in EVERY replicate that would get removed too, i should look at counts instead
+dataToGraph <- dataToGraph[!dataToGraph$FC==1.00000,]
+
+# Generate a 95% confidence interval from the SE
+dataToGraph$upperSE <- dataToGraph$FC+1.96*dataToGraph$SE
+dataToGraph$lowerSE <- dataToGraph$FC-1.96*dataToGraph$SE
+
+# OsRR7's data is SUPER variable, the error is so big it's not possible to log it, it goes negative on the lower bound. taking it out for the graph
+dataToGraph <- dataToGraph[!dataToGraph$GeneID=="OsRR7",]
+
+# Get just the ARRs for the graph, I dont't care about everything else
+arrNames <- paste0("OsRR",c(1,2,3,4,5,6,7,8,9,10,11,12,13,21,22,23,24,25,26,27,28,29,30,31,32,33))
+#arrNames <- paste0("OsRR",c(1,2,3,4,5,6,7,8,9,10))
+
+# Subset by the names of the genes we want
+dataToGraphCut <- dataToGraph[dataToGraph$GeneID %in% arrNames,]
+
+# Refactor so they're in the proper order
+dataToGraphCut$GeneID <- factor(dataToGraphCut$GeneID,levels=arrNames)
+
+# Finally we can plot!
+ggplot(dataToGraphCut,aes(x=GeneID,y=log2(FC),
+	group=Genotype,color=Genotype,fill=Genotype)) +
+	geom_bar(width=0.5,stat="identity",position="dodge") +
+	theme(axis.text.x=element_text(angle=-60,hjust=0,size=10),aspect.ratio=0.6,
+		axis.title.x=element_blank(),panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),panel.border=element_blank(),
+		panel.background=element_blank(),axis.line=element_line(color="black")) +
+	geom_errorbar(aes(ymin=log2(lowerSE),
+		ymax=log2(upperSE)),width=0.5,
+		position=position_dodge(0.5),color="black") +
+	ggtitle("Log fold change of CK treated versus untreated rice roots.")+
+	facet_grid(.~Treatment)
+@
+
+I pulled out the cytokinin related genes and graphed them two ways - fold change of BA-treated versus control-treated, and absolute values (normalized across the experiment by the \texttt{DESeq2} package).
+
+For the bar chars, OsRR7 was removed from these plots because the underlying data was too variable to be useful. The OsRR7 FC and SE for Kitaake was \Sexpr{dataToGraphFull$FC[dataToGraphFull$GeneID=="OsRR7" & dataToGraphFull$Genotype=="Kitaake"]} and \Sexpr{dataToGraphFull$SE[dataToGraphFull$GeneID=="OsRR7" & dataToGraphFull$Genotype=="Kitaake"]} and for the \textit{php} mutant was \Sexpr{dataToGraphFull$FC[dataToGraphFull$GeneID=="OsRR7" & dataToGraphFull$Genotype=="php"]} and \Sexpr{dataToGraphFull$SE[dataToGraphFull$GeneID=="OsRR7" & dataToGraphFull$Genotype=="php"]}.
+
+At first glance it looks like the RRs are downregulated in the \textit{php} triple mutant. However, this is due to the the basal expression in the \textit{php} mutant being higher.
+
+<<normGraph,echo=FALSE,fig.cap="Normalized expression of the \\textit{ARR}s.",out.width = "0.9\\textwidth",fig.align="center",fig.lp="fig:">>=
+
+# collect all the counts in a vertical-format frame
+normCountsToGraph <- data.frame(
+	Counts=c(kitCounts[,2],kitCounts[,4],kitCounts[,6],kitCounts[,1],kitCounts[,3],kitCounts[,5],
+	phpCounts[,2],phpCounts[,4],phpCounts[,6],phpCounts[,1],phpCounts[,3],phpCounts[,5],
+	kitCounts5[,2],kitCounts5[,4],kitCounts5[,6],kitCounts5[,1],kitCounts5[,3],kitCounts5[,5],
+	phpCounts5[,2],phpCounts5[,4],phpCounts5[,6],phpCounts5[,1],phpCounts5[,3],phpCounts5[,5]),
+	Genotype=rep(c("Kitaake","php","Kitaake","php"),each=6*dim(kitCounts)[1]),
+	
+	Treatment=rep(c("100nM","NaOH","100nM","NaOH","5uM","NaOH","5uM","NaOH"),each=3*dim(kitCounts)[1]),
+	Locus=rep(rownames(kitCounts),times=24))
+
+# Generate a group ID based on the genotype and treatment
+normCountsToGraph$groupID <- paste(normCountsToGraph$Genotype,normCountsToGraph$Treatment,sep=".")
+
+# Annotate the CK elements with their locus gene id
+normCountsToGraph$GeneID <- ckElements$GeneID[match(normCountsToGraph$Locus,ckElements$Locus)]
+
+# refactor the group ID
+#normCountsToGraph$groupID <- factor(normCountsToGraph$groupID,levels=c("Kitaake.NaOH","php.NaOH","Kitaake.100nM","php.100nM","Kitaake.5uM","php.5uM"))
+normCountsToGraph$groupID <- factor(normCountsToGraph$groupID,levels=c("Kitaake.NaOH","Kitaake.100nM","Kitaake.5uM","php.NaOH","php.100nM","php.5uM"))
+
+
+# refactor the Treatment variable
+normCountsToGraph$Treatment <- factor(normCountsToGraph$Treatment,levels=c("NaOH","100nM","5uM"))
+
+# cut the graph down to just the RRs
+normCountsToGraphCut <- normCountsToGraph[normCountsToGraph$Locus %in% ckElements$Locus[ckElements$GeneID %in% arrNames],]
+
+# Cut the graph down further to just a handful of RRs
+normSmall <- normCountsToGraphCut[normCountsToGraphCut$GeneID %in% c("OsRR2","OsRR4","OsRR6","OsRR9","OsRR10"),]
+
+ggplot(normSmall,aes(x=Treatment,y=Counts,group=Genotype,fill=Genotype,color=Genotype))+
+	stat_summary(fun.y=mean,geom="bar",width=0.5,
+		position=position_dodge(0.5),color="black")+
+	theme(axis.text.x=element_text(angle=-60,hjust=0,size=10),aspect.ratio=0.6,
+		axis.title.x=element_blank(),panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),panel.border=element_blank(),
+		panel.background=element_blank(),axis.line=element_line(color="black")) +
+	facet_wrap(~GeneID,ncol=2)
+
+@
+
+redoing the graph for publication
+<<>>=
+
+fillColor <- c("Kitaake.NaOH"="#deebf7","php.NaOH"="#fee0d2","Kitaake.100nM"="#9ecae1","php.100nM"="#fc9272","Kitaake.5uM"="#3182bd","php.5uM"="#de2d26")
+
+#blue, light to dark
+#deebf7
+#9ecae1
+#3182bd
+
+#red, light to dark
+#fee0d2
+#fc9272
+#de2d26
+
+TAloci <- c("Os04g0442300","Os02g0557800","Os02g0830200","Os01g0952500","Os04g0524300","Os04g0673300","Os07g0449700","Os08g0376700","Os11g0143300","Os12g0139400","Os02g0631700","Os08g0377200","Os08g0358800")
+
+# Grab all the type-As
+normCountsToGraphCutTAs <- normCountsToGraphCut[normCountsToGraphCut$GeneID %in% c("OsRR1","OsRR10","OsRR2","OsRR4","OsRR6","OsRR9","OsRR7","OsRR3","OsRR5"),]
+
+# Get rid of low-count genes
+normCountsToGraphCutTAsSmall <- normCountsToGraphCut[normCountsToGraphCut$GeneID %in% c("OsRR1","OsRR10","OsRR2","OsRR4","OsRR6","OsRR9"),]
+
+
+normCountsToGraphCutTAsSmallNaOH <- normCountsToGraphCutTAsSmall[normCountsToGraphCutTAsSmall$Treatment == "NaOH",]
+
+#postscript("type-as with concs standard error.eps",fonts="Helvetica",width=20,height=20)
+ggplot(normCountsToGraphCutTAs,aes(x=GeneID,y=Counts,group=groupID,fill=groupID))+
+	stat_summary(fun.y=mean,geom="bar",width=0.5,
+		position=position_dodge(0.5),color="black")+
+	theme(axis.text.x=element_text(angle=-60,hjust=0,size=10),aspect.ratio=0.6,
+		axis.title.x=element_blank(),panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),panel.border=element_blank(),
+		panel.background=element_blank(),axis.line=element_line(color="black")) +
+	scale_fill_manual(values=fillColor) +
+	stat_summary(fun.data=mean_se,geom="errorbar",
+				position=position_dodge(0.5),width=0.25)
+#dev.off()
+	
+#postscript("TAsonly standard error.eps",fonts="Helvetica",width=20,height=20)
+ggplot(normCountsToGraphCutTAsSmallNaOH,aes(x=GeneID,y=Counts,group=groupID,fill=groupID))+
+	stat_summary(fun.y=mean,geom="bar",width=0.5,
+		position=position_dodge(0.5),color="black")+
+	theme(axis.text.x=element_text(angle=-60,hjust=0,size=10),aspect.ratio=0.6,
+		axis.title.x=element_blank(),panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),panel.border=element_blank(),
+		panel.background=element_blank(),axis.line=element_line(color="black")) +
+	scale_fill_manual(values=fillColor) +
+	stat_summary(fun.data=mean_se,geom="errorbar",
+				position=position_dodge(0.5),width=0.25)
+#dev.off()
+@
+
+<<>>=
+CKXs <- c("Os01g0187600","Os01g0197700","Os01g0775400","Os01g0940000","Os02g0220000","Os02g0220100","Os04g0523500","Os05g0374200","Os06g0572300","Os08g0460600","Os10g0483500")
+
+CKXsCut <- c("Os01g0187600","Os01g0197700","Os01g0775400","Os01g0940000","Os04g0523500","Os05g0374200","Os06g0572300","Os08g0460600","Os10g0483500")
+CKXnames <- c("CKX1","OsCKX2","CKX5","OsCKX4","CKX8","CKX9","CKX10","CKX11","CKX3")
+
+
+#normCountsToGraphCKX <- normCountsToGraph[normCountsToGraph$Locus %in% CKXs,]
+normCountsToGraphCKX <- normCountsToGraph[normCountsToGraph$Locus %in% CKXsCut,]
+
+normCountsToGraphCKX$GeneID <- CKXnames[match(normCountsToGraphCKX$Locus,CKXsCut)]
+
+#postscript("CKXs with concs standard error.eps",fonts="Helvetica",width=20,height=20)
+ggplot(normCountsToGraphCKX,aes(x=GeneID,y=Counts,group=groupID,fill=groupID))+
+	stat_summary(fun.y=mean,geom="bar",width=0.5,
+		position=position_dodge(0.5),color="black")+
+	theme(axis.text.x=element_text(angle=-60,hjust=0,size=10),aspect.ratio=0.6,
+		axis.title.x=element_blank(),panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),panel.border=element_blank(),
+		panel.background=element_blank(),axis.line=element_line(color="black")) +
+	scale_fill_manual(values=fillColor) +
+	stat_summary(fun.data=mean_se,geom="errorbar",
+				position=position_dodge(0.5),width=0.25)
+#dev.off()
+
+
+
+normCountsToGraphCKXcontrol <- normCountsToGraphCKX[normCountsToGraphCKX$Treatment=="NaOH",]
+#postscript("CKXs with concs control only.eps",fonts="Helvetica",width=20,height=20)
+ggplot(normCountsToGraphCKXcontrol,aes(x=GeneID,y=Counts,group=groupID,fill=groupID))+
+	stat_summary(fun.y=mean,geom="bar",width=0.5,
+		position=position_dodge(0.5),color="black")+
+	theme(axis.text.x=element_text(angle=-60,hjust=0,size=10),aspect.ratio=0.6,
+		axis.title.x=element_blank(),panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),panel.border=element_blank(),
+		panel.background=element_blank(),axis.line=element_line(color="black")) +
+	scale_fill_manual(values=fillColor) +
+	stat_summary(fun.data=mean_cl_normal,geom="errorbar",
+				position=position_dodge(0.5),width=0.25)
+#dev.off()
+
+
+
+
+
+@
+
+
+<<>>=
+LOGloci <- c("Os10g0479500","Os09g0547500","Os05g0591600","Os05g0541200","Os04g0518800","Os03g0857900","Os03g0697200","Os03g0109300","Os02g0628000","Os01g0708500","Os01g0588900")
+LOGnames <- c("LOGL10","LOGL9","LOGL8","LOGL7","LOGL6","LOGL5","LOGL4","LOGL3","LOGL2","LOGL1","LOG1")
+
+normCountsToGraphLOG <- normCountsToGraph[normCountsToGraph$Locus %in% LOGloci,]
+
+normCountsToGraphLOG$GeneID <- LOGnames[match(normCountsToGraphLOG$Locus,LOGloci)]
+
+#postscript("LOGs with concs.eps",fonts="Helvetica",width=20,height=20)
+ggplot(normCountsToGraphLOG,aes(x=GeneID,y=Counts,group=groupID,fill=groupID))+
+	stat_summary(fun.y=mean,geom="bar",width=0.5,
+		position=position_dodge(0.5),color="black")+
+	theme(axis.text.x=element_text(angle=-60,hjust=0,size=10),aspect.ratio=0.6,
+		axis.title.x=element_blank(),panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),panel.border=element_blank(),
+		panel.background=element_blank(),axis.line=element_line(color="black")) +
+	scale_fill_manual(values=fillColor)+
+	stat_summary(fun.data=mean_cl_normal,geom="errorbar",
+				position=position_dodge(0.5),width=0.25)
+#dev.off()
+
+
+@
+
+<<>>=
+IPTloci <- c("Os07g0211700","Os07g0190150","Os06g0729800","Os05g0551700","Os05g0311801","Os03g0810100","Os03g0356900","Os01g0968700","Os01g0688300")
+IPTnames <- c("IPT5","IPTx","IPT10","IPT7","IPT3","IPT4","IPT2","IPT9","IPT8")
+
+
+normCountsToGraphIPT <- normCountsToGraph[normCountsToGraph$Locus %in% IPTloci,]
+
+normCountsToGraphIPT$GeneID <- IPTnames[match(normCountsToGraphIPT$Locus,IPTloci)]
+
+#postscript("IPTs with concs.eps",fonts="Helvetica",width=20,height=20)
+ggplot(normCountsToGraphIPT,aes(x=GeneID,y=Counts,group=groupID,fill=groupID))+
+	stat_summary(fun.y=mean,geom="bar",width=0.5,
+		position=position_dodge(0.5),color="black")+
+	theme(axis.text.x=element_text(angle=-60,hjust=0,size=10),aspect.ratio=0.6,
+		axis.title.x=element_blank(),panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),panel.border=element_blank(),
+		panel.background=element_blank(),axis.line=element_line(color="black")) +
+	scale_fill_manual(values=fillColor)+
+	stat_summary(fun.data=mean_cl_normal,geom="errorbar",
+				position=position_dodge(0.5),width=0.25)
+#dev.off()
+
+@
+
+
+
+
+
+<<>>=
+AHPloci <- c("Os08g0557700","Os09g0567400")
+AHPnames <- c("AHP1","AHP2")
+
+
+normCountsToGraphAHP <- normCountsToGraph[normCountsToGraph$Locus %in% AHPloci,]
+
+normCountsToGraphAHP$GeneID <- AHPnames[match(normCountsToGraphAHP$Locus,AHPloci)]
+
+#postscript("AHPs with concs.eps",fonts="Helvetica",width=20,height=20)
+ggplot(normCountsToGraphAHP,aes(x=GeneID,y=Counts,group=groupID,fill=groupID))+
+	stat_summary(fun.y=mean,geom="bar",width=0.5,
+		position=position_dodge(0.5),color="black")+
+	theme(axis.text.x=element_text(angle=-60,hjust=0,size=10),aspect.ratio=0.6,
+		axis.title.x=element_blank(),panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),panel.border=element_blank(),
+		panel.background=element_blank(),axis.line=element_line(color="black")) +
+	scale_fill_manual(values=fillColor)+
+	stat_summary(fun.data=mean_cl_normal,geom="errorbar",
+				position=position_dodge(0.5),width=0.25)
+#dev.off()
+
+@
+
+
+<<>>=
+AHKloci <- c("Os01g0923700","Os03g0717700","Os10g0362300","Os02g0738400","Os12g0454800")
+AHKnames <- c("HK3","HK4","HK5","HK6locus1","CRL4")
+
+
+normCountsToGraphAHK <- normCountsToGraph[normCountsToGraph$Locus %in% AHKloci,]
+
+normCountsToGraphAHK$GeneID <- AHKnames[match(normCountsToGraphAHK$Locus,AHKloci)]
+
+#postscript("AHKs with concs.eps",fonts="Helvetica",width=20,height=20)
+ggplot(normCountsToGraphAHK,aes(x=GeneID,y=Counts,group=groupID,fill=groupID))+
+	stat_summary(fun.y=mean,geom="bar",width=0.5,
+		position=position_dodge(0.5),color="black")+
+	theme(axis.text.x=element_text(angle=-60,hjust=0,size=10),aspect.ratio=0.6,
+		axis.title.x=element_blank(),panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),panel.border=element_blank(),
+		panel.background=element_blank(),axis.line=element_line(color="black")) +
+	scale_fill_manual(values=fillColor)+
+	stat_summary(fun.data=mean_cl_normal,geom="errorbar",
+				position=position_dodge(0.5),width=0.5)
+#dev.off()
+
+@
+
+
+
+
+
+
+\subsection{Mutation effect on CK response}
+So far, my analyses have focused on the effect of cytokinin treatment between samples of the same genotype. I will shift now to analyze the effect of mutation at each treatment level.
+Ultimately, I want to compare which genes are altered by mutation in the control condition and in cytokinin-treated conditions.
+
+<<mutationonly,echo=FALSE,message=FALSE>>=
+mutationNaOH <- results(riceDds2,contrast=c("Group","php.NaOH","Kitaake.NaOH"),filterFun=ihw,alpha=0.05)
+mutationBA100 <- results(riceDds2,contrast=c("Group","php.100nM","Kitaake.100nM"),filterFun=ihw,alpha=0.05)
+mutationBA5 <- results(riceDds2,contrast=c("Group","php.5uM","Kitaake.5uM"),filterFun=ihw,alpha=0.05)
+
+NaOHresults <- resultsFrameProcess(mutationNaOH,0.05,1.5)
+BA100results <- resultsFrameProcess(mutationBA100,0.05,1.5)
+BA5results <- resultsFrameProcess(mutationBA5,0.05,1.5)
+
+write.table(mutationNaOH,"Export/unprocessed expression values Php NaOH vs Kitaake NaOH.txt",quote=FALSE,col.names=TRUE)
+write.table(mutationBA100,"Export/unprocessed expression values Php100nM vs Kitaake 100nM.txt",quote=FALSE,col.names=TRUE)
+write.table(mutationBA5,"Export/unprocessed expression values Php5uM vs Kitaake 5uM.txt",quote=FALSE,col.names=TRUE)
+
+goFunc(NaOHresults,lengthDataRAP,GOdata,printGO=FALSE,writefile=TRUE,filename="Export/php vs kitaake untreated 0.05 1.5 fold enriched GO terms.txt")
+goFunc(BA100results,lengthDataRAP,GOdata,printGO=FALSE,writefile=TRUE,filename="Export/php vs kitaake 100 nM BA 0.05 1.5 fold fold enriched GO terms.txt")
+goFunc(BA5results,lengthDataRAP,GOdata,printGO=FALSE,writefile=TRUE,filename="Export/php vs kitaake 5uM BA 0.05 1.5 fold fold enriched GO terms.txt")
+
+@
+
+
+<<>>=
+kable(NaOHresults[rownames(NaOHresults) %in% AHKloci,])
+@
+
+<<>>=
+kable(NaOHresults[rownames(NaOHresults) %in% AHPloci,])
+@
+
+<<>>=
+kable(NaOHresults[rownames(NaOHresults) %in% TAloci,])
+@
+
+<<>>=
+kable(NaOHresults[rownames(NaOHresults) %in% CKXs,])
+@
+
+<<>>=
+kable(NaOHresults[rownames(NaOHresults) %in% IPTloci,])
+@
+
+The effect of mutation on NaOH-treated plants results in \Sexpr{dim(NaOHresults)[1]} DE genes, on 100 nM BA-treated plants in \Sexpr{dim(BA100results)[1]} DE genes, and on 5 $\upmu$M BA-treated plants in \Sexpr{dim(BA5results)[1]} DE genes.
+
+The overlap between the NaOH-treated and 100 nM BA-treated conditions are \Sexpr{sum(rownames(NaOHresults) %in% rownames(BA100results))} DE genes. The overlap between NaOH-treated and 5 $\upmu$M BA-treated is \Sexpr{sum(rownames(NaOHresults) %in% rownames(BA5results))} DE genes. The overlap between the two BA-treated samples is \Sexpr{sum(rownames(BA100results) %in% rownames(BA5results))} DE genes.
+
+\subsection{Foldchange-plot}
+It's not a very useful plot but I did prepare a plot comparing BA-vs-treatment fold-changes in the wild-type and mutant plants. The data graphed there is the normalized data, not the VST data, and the count values have 1 added to the numerator and denominator so that no zero or infinite fold changes are produced.
+
+<<FCplot,echo=FALSE,out.width = "0.8\\textwidth",fig.align="center",fig.lp="fig:">>=
+
+kitCounts <- data.frame(normCounts[,c(1,2,7,8,13,14)])
+phpCounts <- data.frame(normCounts[,c(4,5,10,11,16,17)])
+kitCounts5 <- data.frame(normCounts[,c(1,3,7,9,13,15)])
+phpCounts5 <- data.frame(normCounts[,c(4,6,10,12,16,18)])
+
+
+exprCutoff <- 20
+
+# Generate fold change values
+# Using a "means +1" ratio
+
+hundrednanomolarBool <- rowMeans(kitCounts[1:6])>=exprCutoff & rowMeans(phpCounts[1:6])>= exprCutoff
+fivemicromolarBool <- rowMeans(kitCounts5[1:6])>=exprCutoff & rowMeans(phpCounts5[1:6])>=exprCutoff
+
+kitCountsNew <- kitCounts[hundrednanomolarBool,]
+phpCountsNew <- phpCounts[hundrednanomolarBool,]
+kitCounts5New <- kitCounts5[fivemicromolarBool,]
+phpCounts5New <- phpCounts5[fivemicromolarBool,]
+
+dataToGraphFull <- data.frame(
+	Locus=c(rownames(kitCountsNew),rownames(phpCountsNew),rownames(kitCounts5New),rownames(phpCounts5New)),
+	FC=c(kitCountsNew$FC,phpCountsNew$FC,kitCounts5New$FC,phpCounts5New$FC),
+	Genotype=c(
+		rep("Kitaake",dim(kitCountsNew)[1]),
+		rep("php",dim(phpCountsNew)[1]),
+		rep("Kitaake",dim(kitCounts5New)[1]),
+		rep("php",dim(phpCounts5New)[1])),
+	Treatment=c(
+		rep("100nM",dim(kitCountsNew)[1]+dim(phpCountsNew)[1]),
+		rep("5uM",dim(kitCounts5New)[1]+dim(phpCounts5New)[1])))
+
+lociToRemove <- rownames(normCounts[apply(normCounts,1,sum)==0,])
+
+dataToGraphFull <- dataToGraphFull[!dataToGraphFull$Locus %in% lociToRemove,]
+
+dataToGraphGG <- dataToGraphFull[dataToGraphFull$Genotype=="Kitaake",]
+dataToGraphPhp <- dataToGraphFull[dataToGraphFull$Genotype=="php",]
+
+dataToGraphGG$WTFC <- dataToGraphGG$FC
+dataToGraphGG$PHPFC <- dataToGraphPhp$FC
+
+#dataToGraphGG2 <- dataToGraphGG[log2(dataToGraphGG$WTFC)>=1.5,]
+#for any x, get points that are more than [z] away from the y
+
+dataToGraphGG2 <- dataToGraphGG
+dataToGraphGG2$pointcolor <- c("inside","outside")[(abs(log2(dataToGraphGG$PHPFC) - log2(dataToGraphGG$WTFC))>=1.5)+1]
+
+colormap <- c(outside="#FF0000",inside="#999999")
+
+ggplot(dataToGraphGG2,aes(x=log2(WTFC),y=log2(PHPFC),color=pointcolor,fill=pointcolor))+
+	geom_point(size=1)+
+	xlim(floor(min(log2(dataToGraphGG$WTFC),log2(dataToGraphGG$PHPFC))),
+		ceiling(max(log2(dataToGraphGG$WTFC),log2(dataToGraphGG$PHPFC))))+
+	ylim(floor(min(log2(dataToGraphGG$WTFC),log2(dataToGraphGG$PHPFC))),
+		ceiling(max(log2(dataToGraphGG$WTFC),log2(dataToGraphGG$PHPFC))))+
+	geom_abline(intercept=0,slope=1)+
+	scale_color_manual(values=colormap)+
+	theme(panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),
+		panel.background=element_blank(),
+		panel.border=element_rect(color="black",fill=NA),
+		legend.position="none")+
+	coord_fixed()
+
+@
+
+
+<<>>=
+#sort the genes in the table by their difference from the 1:1 line
+dataToGraphGG2$fcdiff <- dataToGraphGG2$PHPFC-dataToGraphGG2$WTFC
+dataToGraphGG2 <- dataToGraphGG2[order(abs(dataToGraphGG2$fcdiff),decreasing=TRUE),]
+dataToGraphGG2Cut <- dataToGraphGG2[dataToGraphGG2$fcdiff>=1.5,]
+kable(head(dataToGraphGG2Cut))
+@
+
+
+<<>>=
+#collect genes that are DE in kitaake or php in any subset
+
+allCKDEgenes <- unique(c(rownames(KitonlyCut),rownames(Kitonly5Cut),rownames(PhponlyCut),rownames(PhponlyCut5)))
+
+dataToGraphGG3 <- dataToGraphGG2[dataToGraphGG2$Locus %in% allCKDEgenes,]
+
+dataToGraphGG3$pointcolor <- c("inside","outside")[(abs(log2(dataToGraphGG3$PHPFC) - log2(dataToGraphGG3$WTFC))>=3)+1]
+
+colormap <- c(outside="#FF0000",inside="#999999")
+
+# 100 nM version
+dtg3ba100 <- dataToGraphGG3[dataToGraphGG3$Treatment=="100nM",]
+ggplot(dtg3ba100,aes(x=log2(WTFC),y=log2(PHPFC),color=pointcolor,fill=pointcolor))+
+	geom_point(size=1)+
+	xlim(floor(min(log2(dataToGraphGG$WTFC),log2(dataToGraphGG$PHPFC))),
+		ceiling(max(log2(dataToGraphGG$WTFC),log2(dataToGraphGG$PHPFC))))+
+	ylim(floor(min(log2(dataToGraphGG$WTFC),log2(dataToGraphGG$PHPFC))),
+		ceiling(max(log2(dataToGraphGG$WTFC),log2(dataToGraphGG$PHPFC))))+
+	geom_abline(intercept=0,slope=1)+
+	scale_color_manual(values=colormap)+
+	theme(panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),
+		panel.background=element_blank(),
+		panel.border=element_rect(color="black",fill=NA),
+		legend.position="none")+
+	coord_fixed()
+@
+
+<<>>=
+	
+# 5 uM version
+dataToGraphGG3$pointcolor <- c("inside","outside")[(abs(log2(dataToGraphGG3$PHPFC) - log2(dataToGraphGG3$WTFC))>=1.5)+1]
+
+dtg3ba5 <- dataToGraphGG3[dataToGraphGG3$Treatment=="5uM",]
+
+ggplot(dtg3ba5,aes(x=log2(WTFC),y=log2(PHPFC),color=pointcolor,fill=pointcolor))+
+	geom_point(size=1)+
+	xlim(floor(min(log2(dataToGraphGG$WTFC),log2(dataToGraphGG$PHPFC))),
+		ceiling(max(log2(dataToGraphGG$WTFC),log2(dataToGraphGG$PHPFC))))+
+	ylim(floor(min(log2(dataToGraphGG$WTFC),log2(dataToGraphGG$PHPFC))),
+		ceiling(max(log2(dataToGraphGG$WTFC),log2(dataToGraphGG$PHPFC))))+
+	geom_abline(intercept=0,slope=1)+
+	scale_color_manual(values=colormap)+
+	theme(panel.grid.major=element_blank(),
+		panel.grid.minor=element_blank(),
+		panel.background=element_blank(),
+		panel.border=element_rect(color="black",fill=NA),
+		legend.position="none")+
+	coord_fixed()
+
+
+@
+
+<<>>=
+dataToGraphGG3 <- dataToGraphGG3[order(abs(dataToGraphGG3$fcdiff),decreasing=TRUE),]
+dataToGraphGG3Cut <- dataToGraphGG3[dataToGraphGG3$fcdiff>=1.5,]
+kable(head(dataToGraphGG3Cut,n=20))
+write.table(dataToGraphGG3,file="CK regulated genes with difference in fold change.txt",sep="\t",quote=FALSE)
+
+@
+
+\subsection{Heatmap}
+
+<<allCKheatmap,echo=FALSE,fig.align="center",fig.lp="fig:">>=
+# Get all the unique gene names that are DE across the experiment after treatment with CK
+allCKnames <- c(rownames(KitonlyCut),rownames(PhponlyCut),rownames(Kitonly5Cut),rownames(PhponlyCut5))
+allCKnames <- unique(allCKnames)
+
+# Get averages across replicates
+ckReg <- data.frame(normCounts)
+ckReg$Kit0 <- rowMeans(ckReg[,c(1,7,13)])
+ckReg$Kit100 <- rowMeans(ckReg[,c(2,8,14)])
+ckReg$Kit5 <- rowMeans(ckReg[,c(3,9,15)])
+ckReg$PHP0 <- rowMeans(ckReg[,c(4,10,16)])
+ckReg$PHP100 <- rowMeans(ckReg[,c(5,11,17)])
+ckReg$PHP5 <- rowMeans(ckReg[,c(6,12,18)])
+
+# Reduce the object down to just the rowmeans
+ckReg <- as.matrix(ckReg[,19:24])
+
+# Reduce the object down to just CK-regulated genes
+ckRegCut <- ckReg[rownames(ckReg) %in% allCKnames,]
+ckRegCut2 <- ckRegCut
+rownames(ckRegCut2) <- NULL
+
+# Graph
+#pheatmap(ckRegCut2,scale="row",cluster_cols=FALSE)
+@
+
+I have prepared a heatmap in Figure \ref{fig:falseNorm} showing all cytokinin-regulated genes in the experiment. Any gene differentially expressed in any of the cytokinin treatments in either Kitaake or the \textit{php} mutants was included.
+There are \Sexpr{sum(apply(ckRegCut2,1,function(x) return(any(x==0))))} genes which have 0 counts in at least one pooled sample. I removed those genes. I also removed a single gene, \texttt{Os01g0197700}, as it is so highly expressed at the 5 $\upmu$M condition that it skews the color bars for everything else. It's astonishingly upregulated, too. That gene, \texttt{Os01g0197700}, is Cytokinin oxidase-dehydrogenase. Additionally, I re-normalized the data so that it is all normalized to the wild-type control sample.
+
+<<falseNorm,echo=FALSE,fig.align="center",fig.lp="fig:",fig.cap="Expression of cytokinin-responsive genes, normalized to the NaOH-treated Kitaake expression values.">>=
+# need to pull out Os01g0197700 of this list, it's messing up the whole thing
+ckRegCutNoZero <- ckRegCut[apply(ckRegCut,1,function(x) return(!any(x==0))),]
+
+ckRegCutNoZero <- ckRegCutNoZero[!rownames(ckRegCutNoZero) == "Os01g0197700",]
+ckRegCutNoZero <- apply(ckRegCutNoZero,2,function(x) return(x/ckRegCutNoZero[,1]))
+ckRegCutNoZeroGraph <- ckRegCutNoZero
+names(ckRegCutNoZeroGraph) <- NULL
+ckFalseNorm <- ckRegCutNoZeroGraph
+
+
+# Normalize to Kitaake, untreated
+for (eachRow in 1:dim(ckFalseNorm)[1]) {
+	temp <- ckFalseNorm[eachRow,]
+	temp <- temp - temp[[1]]
+	temp <- temp / sd(temp)
+	ckFalseNorm[eachRow,] <- temp
+}
+
+names(ckFalseNorm) <- NULL
+rownames(ckFalseNorm) <- NULL
+
+#postscript("ckFalseNorm heatmap.eps",fonts="Helvetica",width=4,height=4)
+ckHeatmap <- pheatmap(ckFalseNorm[,c(1,2,3,4,5,6)],cluster_cols=FALSE)
+#dev.off()
+
+# Get order of genes in heatmap
+#geneOrder <- rownames(ckRegCutNoZeroGraph)[ckHeatmap$tree_row$order]
+
+# extract out a specific set
+@
+
+
+\subsection{Overlap of mutation and cytokinin responses}
+I was curious to see how the effect of mutation at the control condition compared to the effect of cytokinin treatment in Kitaake. The comparison for the 100 nM treatment is shown in Figure \ref{fig:100nMmutoverlap} and the comparison for the 5 $\upmu$M comparison is shown in Figure \ref{fig:5uMmutoverlap}.
+<<echo=FALSE,results=FALSE>>=
+venn.diagram(
+	list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange<0]),
+		Cytokinin=rownames(KitonlyCut)[KitonlyCut$log2FoldChange<0]),
+	filename="mutCK100down.png",
+	imagetype="png",
+	main="Overlap of CK-down and mutation-down genes",
+	fill=c("cornflowerblue","yellow")
+	)
+normCountsMutDown <- normCounts[rownames(normCounts) %in% rownames(KvPCut)[KvPCut$log2FoldChange<0],]
+normCountsCK100Down <- normCounts[rownames(normCounts) %in% rownames(KitonlyCut)[KitonlyCut$log2FoldChange<0],]
+	
+venn.diagram(
+	list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange>0]),
+		Cytokinin=rownames(KitonlyCut)[KitonlyCut$log2FoldChange>0]),
+	filename="mutCK100up.png",
+	imagetype="png",
+	main="Overlap of CK-up and mutation-up genes",
+	fill=c("cornflowerblue","yellow")
+	)
+normCountsMutUp <- normCounts[rownames(normCounts) %in% (rownames(KvPCut)[KvPCut$log2FoldChange>0]),]
+normCountsCK100Up <- normCounts[rownames(normCounts) %in% rownames(KitonlyCut)[KitonlyCut$log2FoldChange>0],]
+
+venn.diagram(
+	list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange<0]),
+		Cytokinin=rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange<0]),
+	filename="mutCK5down.png",
+	imagetype="png",
+	main="Overlap of CK-down and mutation-down genes",
+	fill=c("cornflowerblue","yellow")
+	)
+normCountsCK5Down <- normCounts[rownames(normCounts) %in% rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange<0],]
+
+venn.diagram(
+	list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange>0]),
+		Cytokinin=rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange>0]),
+	filename="mutCK5up.png",
+	imagetype="png",
+	main="Overlap of CK-up and mutation-up genes",
+	fill=c("cornflowerblue","yellow")
+	)
+normCountsCK5Up <- normCounts[rownames(normCounts) %in% rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange>0],]
+
+write.table(normCountsCK100Down,file="Export/ck-down genes 100 nM.txt",sep="\t",quote=FALSE)
+write.table(normCountsMutDown,file="Export/mutation-down genes.txt",sep="\t",quote=FALSE)
+write.table(normCountsCK100Up,file="Export/ck-up genes 100 nM.txt",sep="\t",quote=FALSE)
+write.table(normCountsMutUp,file="Export/mutation-up genes.txt",sep="\t",quote=FALSE)
+write.table(normCountsCK5Down,file="Export/ck-down genes 5 uM.txt",sep="\t",quote=FALSE)
+write.table(normCountsCK5Up,file="Export/ck-up genes 5 uM.txt",sep="\t",quote=FALSE)
+
+	
+	
+	
+venn.diagram(
+	list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange<0]),
+		Cytokinin=rownames(KitonlyCut)[KitonlyCut$log2FoldChange<0]),
+	filename="mutCK100down.svg",
+	imagetype="svg",
+	main="Overlap of CK-down and mutation-down genes",
+	fill=c("cornflowerblue","yellow")
+	)
+
+venn.diagram(
+	list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange>0]),
+		Cytokinin=rownames(KitonlyCut)[KitonlyCut$log2FoldChange>0]),
+	filename="mutCK100up.svg",
+	imagetype="svg",
+	main="Overlap of CK-up and mutation-up genes",
+	fill=c("cornflowerblue","yellow")
+	)
+
+venn.diagram(
+	list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange<0]),
+		Cytokinin=rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange<0]),
+	filename="mutCK5down.svg",
+	imagetype="svg",
+	main="Overlap of CK-down and mutation-down genes",
+	fill=c("cornflowerblue","yellow")
+	)
+
+venn.diagram(
+	list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange>0]),
+		Cytokinin=rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange>0]),
+	filename="mutCK5up.svg",
+	imagetype="svg",
+	main="Overlap of CK-up and mutation-up genes",
+	fill=c("cornflowerblue","yellow")
+	)
+@
+
+
+\begin{figure}
+	\begin{subfigure}{0.49\linewidth}
+		\includegraphics[width=\linewidth]{mutCK100up.png}
+		\caption{Upregulated genes.}
+		\label{fig:100nMmutoverlapA}
+	\end{subfigure}
+	\begin{subfigure}{0.49\linewidth}
+		\includegraphics[width=\linewidth]{mutCK100down.png}
+		\caption{Downregulated genes.}
+		\label{fig:100nMmutoverlapB}
+	\end{subfigure}
+	
+	\caption{Overlap of genes differentially regulated after treatment with 100 nM BA and after mutation of the \textit{php}s. All genes are p-value and fold-change filtered.}
+	\label{fig:100nMmutoverlap}
+\end{figure}
+
+
+\begin{figure}
+	\begin{subfigure}{0.49\linewidth}
+		\includegraphics[width=\linewidth]{mutCK5up.png}
+		\caption{Upregulated genes.}
+		\label{fig:5uMmutoverlapA}
+	\end{subfigure}
+	\begin{subfigure}{0.49\linewidth}
+		\includegraphics[width=\linewidth]{mutCK5down.png}
+		\caption{Downregulated genes.}
+		\label{fig:5uMmutoverlapB}
+	\end{subfigure}
+	
+	\caption{Overlap of genes differentially regulated after treatment with 5 $\upmu$M BA and after mutation of the \textit{php}s. All genes are p-value and fold-change filtered.}
+	\label{fig:5uMmutoverlap}
+\end{figure}
+
+\subsection{Kitaake-specific changes?}
+We were curious about what was going on with the genes that are DE for Kitaake but not DE in the \textit{php} mutants in Figure \ref{fig:squarevenn5}. If the \textit{PHP}s are negative regulators, we'd expect something across the board similar to what we see in Figure \ref{fig:normGraph}, where the ARRs are up basally in the \textit{php} mutant but have a similar upper level of expression after treatment with BA. If the \textit{PHP}s were positive regulators, we would expect that loss of the \textit{PHP}s would result in failure to induce some genes with BA or that induction would be lower than in Kitaake.
+
+I extracted the genes that are DE in Kitaake after the 5 $\upmu$M treatment that were not counted as DE in the \textit{php} mutant. The expression levels are shown in Figure \ref{fig:kitaakespecific}.
+Strikingly, while some genes are definitely basally higher, there are large chunks of genes that are unresponsive to BA in the mutant. There is even a small block of genes that are upregulated in Kitaake but appear downregulated after BA treatment in the mutant.
+
+<<kitaakespecific,echo=FALSE,fig.cap="Genes DE in Kitaake and not DE in \textit{php} mutant after 5$\\upmu$M BA treatment.",fig.lp="fig:">>=
+#what's going on with the genes that are induced by BA in the WT, but aren't induced by BA in the mutant?
+#is it just that their basal level is higher when you look at the php mutants?
+
+KitonlyCut <- resultsFrameProcess(Kitonly,0.05,1.5)
+Kitonly5Cut <- resultsFrameProcess(Kitonly5,0.05,1.5)
+PhponlyCut <- resultsFrameProcess(Phponly,0.05,1.5)
+PhponlyCut5 <- resultsFrameProcess(Phponly5,0.05,1.5)
+
+# Get the names of the genes that are Up in Kitaake but NOT up in phps
+KitOnlyChangedNames <- unique(c(rownames(Kitonly5Cut)))#,rownames(Kitonly5Cut)))
+#KitOnlyChangedNames <- KitOnlyChangedNames[!KitOnlyChangedNames %in% rownames(PhponlyCut)]
+KitOnlyChangedNames <- KitOnlyChangedNames[!KitOnlyChangedNames %in% rownames(PhponlyCut5)]
+
+# get the normalized counts of those genes
+normCountsMeans <- data.frame(normCounts)
+normCountsMeans$Kit0 <-   rowMeans(normCountsMeans[,c(1,7,13)])
+normCountsMeans$Kit100 <- rowMeans(normCountsMeans[,c(2,8,14)])
+normCountsMeans$Kit5 <-   rowMeans(normCountsMeans[,c(3,9,15)])
+normCountsMeans$php0 <-   rowMeans(normCountsMeans[,c(4,10,16)])
+normCountsMeans$php100 <- rowMeans(normCountsMeans[,c(5,11,17)])
+normCountsMeans$php5 <-   rowMeans(normCountsMeans[,c(6,12,18)])
+
+
+normCountsKitOnly <- normCountsMeans[(rownames(normCountsMeans)) %in% KitOnlyChangedNames,]
+normCountsKitOnly <- normCountsKitOnly[c(19,20,21,22,23,24)]
+
+# Normalize to Kitaake, untreated
+for (eachRow in 1:dim(normCountsKitOnly)[1]) {
+	temp <- normCountsKitOnly[eachRow,]
+	temp <- temp - temp[[1]]
+	temp <- temp / sd(temp)
+	normCountsKitOnly[eachRow,] <- temp
+}
+
+pheatmap(normCountsKitOnly[c(1,3,4,6)],cluster_cols=FALSE)
+
+@
+
+
+Missing from this visualization is information on variance in the expression estimates. Some of the php results may be false negatives due to high variance. I've computed the variance of the genes shown in this plot and summarized them in Table \ref{tab:KitsVariance}. Most genes have a standard deviation under 100, with a very long, thin tail to the distributions.
+
+
+
+<<echo=FALSE>>=
+normCountsSDs <- data.frame(normCounts)
+normCountsSDs$Kit0.SD <-   apply(normCountsSDs[,c(1,7,13)],1,sd)
+normCountsSDs$Kit100.SD <- apply(normCountsSDs[,c(2,8,14)],1,sd)
+normCountsSDs$Kit5.SD <-   apply(normCountsSDs[,c(3,9,15)],1,sd)
+normCountsSDs$php0.SD <-   apply(normCountsSDs[,c(4,10,16)],1,sd)
+normCountsSDs$php100.SD <- apply(normCountsSDs[,c(5,11,17)],1,sd)
+normCountsSDs$php5.SD <-   apply(normCountsSDs[,c(6,12,18)],1,sd)
+
+normCountsSDs <- normCountsSDs[19:24]
+
+sdsKitOnly <- normCountsSDs[rownames(normCountsSDs) %in% rownames(normCountsKitOnly),]
+@
+
+\begin{table}
+	\Sexpr{kable(summary(sdsKitOnly),format="latex",booktabs=TRUE)}
+	\caption{Summary statistics for the standard deviations of the data shown in Figure \ref{fig:kitaakespecific}.}
+	\label{tab:KitsVariance}
+\end{table}
+
+<<echo=FALSE>>=
+lowVarThreshold <- 100
+sdsKitLowVarNames <- rownames(sdsKitOnly[sdsKitOnly[1]<=lowVarThreshold,])
+normCountsKitOnlyLowVar <- normCountsKitOnly[rownames(normCountsKitOnly) %in% sdsKitLowVarNames,]
+@
+
+I would like to filter out all the genes with high variance. In this case, I'll take that to be any gene with a standard deviation greater than \Sexpr{lowVarThreshold} in the untreated Kitaake plants.
+
+
+<<lowvariance,echo=FALSE,fig.cap="Heatmap of Kitaake-specific DE genes after 5 $\\upmu$M BA treatment, with high-variance genes removed.">>=
+pheatmap(normCountsKitOnlyLowVar[c(1,3,4,6)],cluster_cols=FALSE)
+@
+
+
+
+
+\newpage{}
+
+\section{Session Information}
+<<sessioninfo,echo=FALSE>>=
+sessionInfo()
+graphics.off()
+@
+
+\end{document}
+
+
+
+
+
+
+#diffGenes <- as.integer(lengthDataRAP$RAP %in% toupper(row.names(NaOHresults)))
+#names(diffGenes) <- lengthDataRAP$RAP
+
+#probWeightFunc <- nullp(DEgenes = diffGenes,
+#	bias.data=lengthDataRAP$Length,plot.fit=TRUE)
+
+#GO.wallenius <- goseq(probWeightFunc,
+#	test.cats = c("GO:CC","GO:BP","GO:MF"),
+#	method="Wallenius",
+#	gene2cat = GOdata)
+
+#GO.enriched <- GO.wallenius$category[p.adjust(
+#	GO.wallenius$over_represented_pvalue,
+#	method="BH")<=0.05]
+
+#for (eachTerm in GO.enriched[1:length(GO.enriched)]) {
+#	print(GOTERM[[eachTerm]])
+#	cat("---------------------\n") }
+
+
+
+# trying to make a function to 
+
+# Listen this GO analysis is WACK, there's some WILD stuff I have to do to make it work
+GOdata <- read.delim("GO-terms-rice-RAP.txt",stringsAsFactors=FALSE)
+GOdata <- split(GOdata, as.factor(GOdata$ensembl_gene_id))
+#GOdataRAP <- GOdata[names(GOdata) %in% lengthDataRAP$RAP]
+
+# GO through the list and turn it from a list of data frames to a list of character vectors
+for (eachElement in seq(1,length(GOdata))) {
+	GOdata[[eachElement]] <- GOdata[[eachElement]]$go_accession
+}
+
+
+
+
+
+#ignore all this stuff down here this is scratch space
+
+
+rownames(KitonlyCut) <- toupper(rownames(KitonlyCut))
+
+# Small function to check whether to remove a row
+# I know could do return(!is.na(x[y])) but i don't WANT to so dont @ me
+
+# edit this to be specific
+KitonlyCut <- KitonlyCut[rownames(KitonlyCut) %in% lengthDataRAP$RAP,]
+PhponlyCut <- PhponlyCut[rownames(PhponlyCut) %in% lengthDataRAP$RAP,]
+
+
+
+
+
+
+sum(toupper(rownames(KvPCut)) %in% rownames(KitonlyCut))
+sum((rownames(KvPCut)) %in% rownames(Kitonly5Cut))
+#what's the overlap in up by ck vs up by mutation?
+
+
+sum(toupper(rownames(KvPCut)[KvPCut$log2FoldChange>0]) %in% rownames(KitonlyCut)[KitonlyCut$log2FoldChange>0])
+
+sum(toupper(rownames(KvPCut)[KvPCut$log2FoldChange<0]) %in% rownames(KitonlyCut)[KitonlyCut$log2FoldChange<0])
+
+# 100 nM
+dev.new()
+grid.draw(venn.diagram(list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange<0]),Cytokinin=rownames(KitonlyCut)[KitonlyCut$log2FoldChange<0]),filename=NULL,main="Overlap of CK-down and mutation-down genes",fill=c("cornflowerblue","yellow")))
+dev.new()
+
+grid.draw(venn.diagram(list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange>0]),Cytokinin=rownames(KitonlyCut)[KitonlyCut$log2FoldChange>0]),filename=NULL,main="Overlap of CK-up and mutation-up genes",fill=c("cornflowerblue","yellow")))
+dev.new()
+
+grid.draw(venn.diagram(list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange>0]),Cytokinin=rownames(KitonlyCut)[KitonlyCut$log2FoldChange<0]),filename=NULL,main="Overlap of CK-down and mutation-up genes",fill=c("cornflowerblue","yellow")))
+dev.new()
+
+grid.draw(venn.diagram(list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange<0]),Cytokinin=rownames(KitonlyCut)[KitonlyCut$log2FoldChange>0]),filename=NULL,main="Overlap of CK-up and mutation-down genes",fill=c("cornflowerblue","yellow")))
+
+
+
+
+# 5 uM
+dev.new()
+grid.draw(venn.diagram(list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange<0]),Cytokinin=rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange<0]),filename=NULL,main="Overlap of CK-down and mutation-down genes",fill=c("cornflowerblue","yellow")))
+dev.new()
+grid.draw(venn.diagram(list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange>0]),Cytokinin=rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange>0]),filename=NULL,main="Overlap of CK-up and mutation-up genes",fill=c("cornflowerblue","yellow")))
+dev.new()
+grid.draw(venn.diagram(list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange>0]),Cytokinin=rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange<0]),filename=NULL,main="Overlap of CK-down and mutation-up genes",fill=c("cornflowerblue","yellow")))
+dev.new()
+grid.draw(venn.diagram(list(Mutation=(rownames(KvPCut)[KvPCut$log2FoldChange<0]),Cytokinin=rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange>0]),filename=NULL,main="Overlap of CK-up and mutation-down genes",fill=c("cornflowerblue","yellow")))
+
+
+
+
+
+
+
+
+#GOdata <- read.delim("gramene_oryza_valid.gaf",comment.char="!",stringsAsFactors=FALSE,header=FALSE)
+#names(GOdata) <- c("DB","DBobjID","DBobjSym","Qualifier","GO.ID","DB.Reference","Evidence","With.From","Aspect","DBobjName","DBobjSyn","DBobjType","Taxon","Date","Assigned.By","Ann.Ext","GeneProdFormID")
+#RAPpattern <- "(Os[[:digit:]]{2}g[[:digit:]]{7})"
+#RAPnames <- regmatches(GOdata$DBobjSym,gregexpr(RAPpattern,GOdata$DBobjSym))
+#for (eachElement in 1:length(RAPnames)) {
+#	if (identical(RAPnames[[eachElement]],character(0))==TRUE) {
+#		RAPnames[[eachElement]] <- NA
+#	}
+#}
+#RAPnames <- unlist(RAPnames)
+#GOdata$RAP <- RAPnames
+#GOdataCut <- GOdata[!is.na(GOdata$RAP),]
+
+
+
+
+
+
+
+
+# this was an aborted attempt to pull out genes that are not changed in php ba treated plants
+#pheatmap(normCountsKitOnlyLowVar[c(1,3,4,6)],cluster_cols=FALSE)
+
+queryNorm <- normCountsKitOnlyLowVar[c(1,3,4,6)]
+queryNorm <- cbind(-3,queryNorm)
+names(queryNorm) <- c("indicator",names(normCountsKitOnlyLowVar[c(1,3,4,6)]))
+
+
+
+
+KitUp5 <- rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange>0]
+KitDown5 <- rownames(Kitonly5Cut)[Kitonly5Cut$log2FoldChange<0]
+PhpUp5 <- rownames(PhponlyCut5)[PhponlyCut5$log2FoldChange>0]
+PhpDown5 <- rownames(PhponlyCut5)[PhponlyCut5$log2FoldChange<0]
+
+KitnophpUp <- KitUp5[! KitUp5 %in% PhpUp5]
+Kitnophp <- KitnophpUp[! KitnophpUp %in%PhpDown5]
+
+
+KitupFrame <- KitonlyCut[KitonlyCut$log2FoldChange>0,]
+KitupFrame2 <- KitupFrame[rownames(KitupFrame) %in% Kitnophp,]
+
+length(unique((GOdata$Locus[GOdata$Locus %in% toupper(rownames(KitupFrame2))])))
+
+# GO:0016841
+# GO:0006559
+
+#what loci are those?
+NH3lyaseLoci <- GOdata$Locus[GOdata$Term %in% c("GO:0016841","GO:0006559")]
+
+Kitonly5Cut[toupper(rownames(Kitonly5Cut)) %in% NH3lyaseLoci,]
+
+
+
+
+
+KitUp <- rownames(KitonlyCut)[KitonlyCut$log2FoldChange>0]
+KitDown <- rownames(KitonlyCut)[KitonlyCut$log2FoldChange<0]
+PhpUp <- rownames(PhponlyCut)[PhponlyCut$log2FoldChange>0]
+PhpDown <- rownames(PhponlyCut)[PhponlyCut$log2FoldChange<0]
+
+KitOnlyDEgenesUp <- unique(c(KitUp,KitUp5))
+KitOnlyDEgenesUp <- KitOnlyDEgenesUp[!KitOnlyDEgenesUp %in% c(PhpUp,PhpDown,PhpUp5,PhpDown5)]
+
+KitOnlyDEgenesDown <- unique(c(KitDown,KitDown5))
+KitOnlyDEgenesDown <- KitOnlyDEgenesDown[!KitOnlyDEgenesDown %in% c(PhpUp,PhpDown,PhpUp5,PhpDown5)]
+
+goFunc(KitOnlyDEgenesUp,lengthDataRAP,GOdata,printGO=FALSE,writefile=TRUE,filename="Export/Kitaake specific genes DE by BA upregulated only.txt")
+goFunc(KitOnlyDEgenesDown,lengthDataRAP,GOdata,printGO=FALSE,writefile=TRUE,filename="Export/Kitaake specific genes DE by BA downregulated only.txt")
+goFunc(unique(c(KitOnlyDEgenesUp,KitOnlyDEgenesDown)),lengthDataRAP,GOdata,printGO=FALSE,writefile=TRUE,filename="Export/Kitaake specific genes DE by BA both up and down regulated.txt")
+
+
+goFunc(unique(c(KitOnlyDEgenesUp,KitOnlyDEgenesDown)),lengthDataRAP,GOdata,printGO=FALSE)
+
+
+
+
+
+
+
+diffGenes <- as.integer(lengthDataRAP$RAP %in% toupper(unique(c(KitOnlyDEgenesUp,KitOnlyDEgenesDown))))
+names(diffGenes) <- lengthDataRAP$RAP
+
+probWeightFunc <- nullp(DEgenes = diffGenes,
+	bias.data=lengthDataRAP$Length,plot.fit=FALSE)
+
+GO.wallenius <- goseq(probWeightFunc,
+	test.cats = c("GO:CC","GO:BP","GO:MF"),
+	method="Wallenius",
+	gene2cat = GOdata)
+
+GO.enriched <- GO.wallenius$category[p.adjust(
+	GO.wallenius$over_represented_pvalue,
+	method="BH")<=0.05]
+	
+
+for (eachTerm in GO.enriched[1:length(GO.enriched)]) {
+	
+	print(GOTERM[[eachTerm]])
+	cat("---------------------\n") 
+}
+
+
+#basal for CKXs with asterixes

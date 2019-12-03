@@ -1,0 +1,77 @@
+GOID: GO:0006355
+Term: regulation of transcription, DNA-templated
+Ontology: BP
+Definition: Any process that modulates the frequency, rate or
+    extent of cellular DNA-templated transcription.
+Synonym: regulation of cellular transcription, DNA-dependent
+Synonym: regulation of gene-specific transcription
+Synonym: regulation of transcription, DNA-dependent
+Synonym: transcriptional control
+Synonym: GO:0032583
+Synonym: GO:0045449
+Synonym: GO:0061019
+Secondary: GO:0032583
+Secondary: GO:0045449
+Secondary: GO:0061019
+---------------------
+GOID: GO:0003700
+Term: DNA-binding transcription factor activity
+Ontology: MF
+Definition: A protein or a member of a complex that interacts
+    selectively and non-covalently with a specific DNA sequence
+    (sometimes referred to as a motif) within the regulatory
+    region of a gene to modulate transcription. Regulatory regions
+    include promoters (proximal and distal) and enhancers. Genes
+    are transcriptional units, and include bacterial operons.
+Synonym: DNA binding transcription factor activity
+Synonym: gene-specific transcription factor activity
+Synonym: nucleic acid binding transcription factor activity
+Synonym: sequence-specific DNA binding transcription factor
+    activity
+Synonym: transcription factor activity
+Synonym: GO:0000130
+Synonym: GO:0001071
+Secondary: GO:0000130
+Secondary: GO:0001071
+---------------------
+GOID: GO:0009690
+Term: cytokinin metabolic process
+Ontology: BP
+Definition: The chemical reactions and pathways involving
+    cytokinins, a class of adenine-derived compounds that can
+    function in plants as growth regulators.
+Synonym: cytokinin metabolism
+---------------------
+GOID: GO:0019139
+Term: cytokinin dehydrogenase activity
+Ontology: MF
+Definition: Catalysis of the reaction: N6-dimethylallyladenine +
+    acceptor + H2O = adenine + 3-methylbut-2-enal + reduced
+    electron acceptor.
+Synonym: 6-N-dimethylallyladenine:acceptor oxidoreductase activity
+Synonym: cytokinin oxidase activity
+Synonym: N6-dimethylallyladenine:(acceptor) oxidoreductase
+    activity
+Synonym: N6-dimethylallyladenine:acceptor oxidoreductase activity
+Synonym: GO:0046420
+Secondary: GO:0046420
+---------------------
+GOID: GO:0020037
+Term: heme binding
+Ontology: MF
+Definition: Interacting selectively and non-covalently with heme,
+    any compound of iron complexed in a porphyrin (tetrapyrrole)
+    ring.
+Synonym: haem binding
+---------------------
+GOID: GO:0000160
+Term: phosphorelay signal transduction system
+Ontology: BP
+Definition: A conserved series of molecular signals found in
+    prokaryotes and eukaryotes; involves autophosphorylation of a
+    histidine kinase and the transfer of the phosphate group to an
+    aspartate that then acts as a phospho-donor to response
+    regulator proteins.
+Synonym: histidyl-aspartyl phosphorelay
+Synonym: phosphorelay signal transduction system
+---------------------
